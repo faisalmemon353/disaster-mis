@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>DISMIS — Audit Log</title>
+  <link rel="stylesheet" href="../assets/css/style.css"/>
+</head>
+<body>
+<div class="app-shell">
+  <div id="sidebar-mount"></div>
+  <div class="main-area">
+    <div class="topbar">
+      <div><div class="topbar-title">AUDIT LOG</div>
+      <div class="topbar-breadcrumb font-mono" style="font-size:10px;color:var(--text-muted)">// SYSTEM ACTIVITY & COMPLIANCE TRAIL</div></div>
+      <div class="topbar-status"><div class="status-dot"></div></div>
+    </div>
+    <div class="page-content">
+      <div class="page-header">
+        <div class="page-header-left"><div class="page-title">SYSTEM AUDIT TRAIL</div><div class="page-sub">// FULL TRACEABILITY LOG</div></div>
+        <button class="btn btn-ghost" onclick="loadAudit()">↻ REFRESH</button>
+      </div>
+
+      <div class="alert alert-warning" style="margin-bottom:16px">
+        🔐 ADMIN ONLY — All system actions, data modifications, and approval decisions are timestamped and logged here.
+      </div>
+
+      <div class="panel">
+        <div class="panel-header flex-between">
+          <span class="panel-title">// Activity Log</span>
+          <span id="audit-count" class="font-mono" style="font-size:11px;color:var(--text-muted)"></span>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Log ID</th>
+                <th>Timestamp</th>
+                <th>User</th>
+                <th>Action</th>
+                <th>Table / Module</th>
+                <th>Details</th>
+                <th>IP Address</th>
+              </tr>
+            </thead>
+            <tbody id="audit-tbody">
+              <tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-muted);font-family:var(--font-mono);font-size:11px">LOADING AUDIT TRAIL...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end">
+          <button class="btn btn-ghost btn-sm" id="btn-prev" onclick="changePage(-1)">← PREV</button>
+          <button class="btn btn-ghost btn-sm" id="btn-next" onclick="changePage(1)">NEXT →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/app.js"></script>
+<script>
+  if (!Auth.requireAuth()) throw new Error();
+  if (!Auth.hasRole('Admin')) { window.location.href = 'dashboard.html'; }
+  fetch('../components/sidebar.html').then(r=>r.text()).then(h=>{document.getElementById('sidebar-mount').innerHTML=h;Sidebar.init();});
+
+  let page = 1, totalPages = 1;
+
+  const actionColors = {
+    LOGIN: 'available', CREATE: 'blue', UPDATE: 'yellow', DELETE: 'critical', APPROVE: 'available', REJECT: 'critical',
+  };
+
+  async function loadAudit() {
+    const res = await API.get(`/analytics/audit-log?page=${page}&limit=50`);
+    if (!res.success) return Toast.error('Failed to load audit log.');
+    document.getElementById('audit-count').textContent = `PAGE ${page}`;
+
+    Table.render('audit-tbody', res.data, [
+      { key: 'LogID', render: r => `<span class="font-mono" style="font-size:11px;color:var(--text-muted)">#${r.LogID}</span>` },
+      { key: 'Timestamp', render: r => `<span class="font-mono" style="font-size:11px">${Format.datetime(r.Timestamp)}</span>` },
+      { key: 'UserFullName', render: r => `<span style="font-weight:600">${r.UserFullName || '—'}</span><br><span class="font-mono" style="font-size:10px;color:var(--text-muted)">${r.Username || ''}</span>` },
+      { key: 'Action', render: r => Format.badge(r.Action, actionColors[r.Action] || 'pending') },
+      { key: 'TableName', render: r => `<span class="font-mono" style="font-size:11px">${r.TableName || '—'}</span>` },
+      { key: 'Details', render: r => `<span style="max-width:240px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-secondary);font-size:13px">${r.Details || '—'}</span>` },
+      { key: 'IPAddress', render: r => `<span class="font-mono" style="font-size:11px;color:var(--text-muted)">${r.IPAddress || '—'}</span>` },
+    ]);
+  }
+
+  function changePage(dir) { page = Math.max(1, page + dir); loadAudit(); }
+
+  loadAudit();
+</script>
+</body>
+</html>

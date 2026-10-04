@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>DISMIS — User Management</title>
+  <link rel="stylesheet" href="../assets/css/style.css"/>
+  <style>
+    .user-row .actions { display:flex; gap:6px; }
+    .user-row.inactive td { opacity:0.55; }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+  <div id="sidebar-mount"></div>
+  <div class="main-area">
+    <div class="topbar">
+      <div>
+        <div class="topbar-title">USER MANAGEMENT</div>
+        <div class="topbar-breadcrumb font-mono" style="font-size:10px;color:var(--text-muted)">// SYSTEM USERS & ACCESS CONTROL</div>
+      </div>
+      <div class="topbar-status"><div class="status-dot"></div></div>
+    </div>
+    <div class="page-content">
+      <div class="page-header">
+        <div class="page-header-left">
+          <div class="page-title">USER DIRECTORY</div>
+          <div class="page-sub">// MANAGE ACCOUNTS & ROLES</div>
+        </div>
+        <div style="display:flex;gap:10px">
+          <button class="btn btn-ghost" onclick="loadUsers()">↻ REFRESH</button>
+          <button class="btn btn-primary" onclick="openAddModal()">+ ADD USER</button>
+        </div>
+      </div>
+
+      <div class="alert alert-warning" style="margin-bottom:16px">
+        🔐 ADMIN ONLY — Create, edit, and activate/deactivate system accounts. Changes are logged to the audit trail.
+      </div>
+
+      <div class="panel">
+        <div class="panel-header flex-between">
+          <span class="panel-title">// All Users</span>
+          <span id="user-count" class="font-mono" style="font-size:11px;color:var(--text-muted)"></span>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Username</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th>Created</th>
+                <th style="width:140px">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="users-tbody">
+              <tr><td colspan="8" style="text-align:center;padding:32px;color:var(--text-muted);font-family:var(--font-mono);font-size:11px">LOADING USERS...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add User Modal -->
+<div id="modal-add-user" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">// CREATE NEW USER</span>
+      <button class="btn btn-ghost btn-icon btn-sm" onclick="Modal.close('modal-add-user')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row form-row-2">
+        <div class="form-group">
+          <label class="form-label">Full Name *</label>
+          <input id="u-fullName" class="form-control" placeholder="Hazber Samson"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Username *</label>
+          <input id="u-username" class="form-control" placeholder="jsmith"/>
+        </div>
+      </div>
+      <div class="form-row form-row-2">
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input id="u-email" type="email" class="form-control" placeholder="user@dismis.pk"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Role *</label>
+          <select id="u-role" class="form-control">
+            <option value="">Select role...</option>
+            <option value="1">Administrator</option>
+            <option value="2">Emergency Operator</option>
+            <option value="3">Field Officer</option>
+            <option value="4">Warehouse Manager</option>
+            <option value="5">Finance Officer</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password *</label>
+        <input id="u-password" type="password" class="form-control" placeholder="Min 8 characters"/>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="Modal.close('modal-add-user')">CANCEL</button>
+      <button class="btn btn-primary" onclick="createUser()">CREATE USER</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit User Modal -->
+<div id="modal-edit-user" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">// EDIT USER</span>
+      <button class="btn btn-ghost btn-icon btn-sm" onclick="Modal.close('modal-edit-user')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="eu-id"/>
+      <div class="form-row form-row-2">
+        <div class="form-group">
+          <label class="form-label">Full Name *</label>
+          <input id="eu-fullName" class="form-control"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Username *</label>
+          <input id="eu-username" class="form-control"/>
+        </div>
+      </div>
+      <div class="form-row form-row-2">
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input id="eu-email" type="email" class="form-control"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">New Password</label>
+          <input id="eu-password" type="password" class="form-control" placeholder="Leave blank to keep current"/>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="Modal.close('modal-edit-user')">CANCEL</button>
+      <button class="btn btn-primary" onclick="updateUser()">SAVE CHANGES</button>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/app.js"></script>
+<script>
+  if (!Auth.requireAuth()) throw new Error();
+  if (!Auth.hasRole('Admin')) { window.location.href = 'dashboard.html'; }
+  fetch('../components/sidebar.html')
+    .then(r => r.text())
+    .then(h => { document.getElementById('sidebar-mount').innerHTML = h; Sidebar.init(); });
+
+  let users = [];
+
+  async function loadUsers() {
+    const res = await API.get('/auth/users');
+    if (!res.success) return Toast.error('Failed to load users.');
+    users = res.data;
+    document.getElementById('user-count').textContent = `${users.length} RECORD(S)`;
+    const currentUserID = Auth.getUser()?.userID;
+
+    Table.render('users-tbody', users, [
+      { key: 'UserID', render: r => `<span class="font-mono" style="font-size:11px;color:var(--text-muted)">#${r.UserID}</span>` },
+      { key: 'FullName', render: r => `<span style="font-weight:600">${r.FullName}</span>` },
+      { key: 'Username', render: r => `<span class="font-mono" style="font-size:11px">${r.Username}</span>` },
+      { key: 'Email', render: r => `<span style="color:var(--text-secondary);font-size:13px">${r.Email || '—'}</span>` },
+      { key: 'RoleName', render: r => Format.badge(r.RoleName, 'blue') },
+      { key: 'IsActive', render: r => r.IsActive ? Format.badge('Active', 'available') : Format.badge('Inactive', 'critical') },
+      { key: 'CreatedAt', render: r => `<span class="font-mono" style="font-size:11px">${Format.date(r.CreatedAt)}</span>` },
+      { key: null, render: r => `
+        <div class="actions">
+          <button class="btn btn-ghost btn-sm" onclick="openEditModal(${r.UserID})">EDIT</button>
+          ${r.UserID === currentUserID
+            ? '<span class="font-mono" style="font-size:10px;color:var(--text-muted)">YOU</span>'
+            : r.IsActive
+              ? `<button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="toggleStatus(${r.UserID}, false)">DEACTIVATE</button>`
+              : `<button class="btn btn-ghost btn-sm" style="color:var(--accent)" onclick="toggleStatus(${r.UserID}, true)">ACTIVATE</button>`
+          }
+        </div>`
+      },
+    ]);
+
+    // Add row styling for inactive users
+    document.querySelectorAll('#users-tbody tr').forEach((row, i) => {
+      if (users[i] && !users[i].IsActive) row.classList.add('inactive');
+    });
+  }
+
+  function openAddModal() {
+    document.getElementById('u-fullName').value = '';
+    document.getElementById('u-username').value = '';
+    document.getElementById('u-email').value = '';
+    document.getElementById('u-role').value = '';
+    document.getElementById('u-password').value = '';
+    Modal.open('modal-add-user');
+  }
+
+  async function createUser() {
+    const body = {
+      fullName: document.getElementById('u-fullName').value.trim(),
+      username: document.getElementById('u-username').value.trim(),
+      email: document.getElementById('u-email').value.trim(),
+      roleID: parseInt(document.getElementById('u-role').value),
+      password: document.getElementById('u-password').value,
+    };
+    if (!body.fullName || !body.username || !body.password || !body.roleID) {
+      return Toast.warning('Please fill all required fields.');
+    }
+    if (body.password.length < 8) {
+      return Toast.warning('Password must be at least 8 characters.');
+    }
+    const res = await API.post('/auth/users', body);
+    if (res.success) {
+      Modal.close('modal-add-user');
+      Toast.success('User created successfully.');
+      loadUsers();
+    } else {
+      Toast.error(res.message);
+    }
+  }
+
+  function openEditModal(userID) {
+    const user = users.find(u => u.UserID === userID);
+    if (!user) return;
+    document.getElementById('eu-id').value = user.UserID;
+    document.getElementById('eu-fullName').value = user.FullName || '';
+    document.getElementById('eu-username').value = user.Username || '';
+    document.getElementById('eu-email').value = user.Email || '';
+    document.getElementById('eu-password').value = '';
+    Modal.open('modal-edit-user');
+  }
+
+  async function updateUser() {
+    const userID = parseInt(document.getElementById('eu-id').value);
+    const body = {
+      fullName: document.getElementById('eu-fullName').value.trim(),
+      username: document.getElementById('eu-username').value.trim(),
+      email: document.getElementById('eu-email').value.trim(),
+      password: document.getElementById('eu-password').value
+    };
+    if (!body.fullName || !body.username) {
+      return Toast.warning('Full name and username are required.');
+    }
+    const res = await API.put(`/auth/users/${userID}`, body);
+    if (res.success) {
+      Modal.close('modal-edit-user');
+      Toast.success('User updated.');
+      loadUsers();
+    } else {
+      Toast.error(res.message);
+    }
+  }
+
+  async function toggleStatus(userID, isActive) {
+    const action = isActive ? 'activate' : 'deactivate';
+    Modal.create({
+      id: 'modal-confirm-status',
+      title: `Confirm ${action.toUpperCase()}`,
+      bodyHTML: `<p>Are you sure you want to ${action} this user account?</p>`,
+      confirmText: action.toUpperCase(),
+      confirmClass: isActive ? 'btn-primary' : 'btn-critical',
+      onConfirm: async () => {
+        const res = await API.put(`/auth/users/${userID}/status`, { isActive });
+        if (res.success) {
+          Toast.success(res.message);
+          loadUsers();
+        } else {
+          Toast.error(res.message);
+        }
+      }
+    });
+    Modal.open('modal-confirm-status');
+  }
+
+  loadUsers();
+</script>
+</body>
+</html>
+

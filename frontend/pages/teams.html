@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>DISMIS — Rescue Teams</title>
+  <link rel="stylesheet" href="../assets/css/style.css"/>
+  <style>
+    .teams-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:16px; margin-bottom:24px; }
+    .team-card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:18px; transition:border-color .15s; }
+    .team-card:hover { border-color:var(--border-bright); }
+    .team-card.available { border-left:3px solid var(--accent); }
+    .team-card.assigned  { border-left:3px solid var(--blue); }
+    .team-card.busy      { border-left:3px solid var(--red); }
+    .team-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:12px; }
+    .team-name { font-size:15px; font-weight:700; }
+    .team-type { font-family:var(--font-mono); font-size:10px; color:var(--text-muted); letter-spacing:1px; text-transform:uppercase; margin-top:2px; }
+    .team-meta { font-family:var(--font-mono); font-size:11px; color:var(--text-secondary); margin-top:10px; display:flex; flex-direction:column; gap:4px; }
+    .team-actions { display:flex; gap:6px; margin-top:14px; }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+  <div id="sidebar-mount"></div>
+  <div class="main-area">
+    <div class="topbar">
+      <div><div class="topbar-title">RESCUE TEAMS</div>
+      <div class="topbar-breadcrumb font-mono" style="font-size:10px;color:var(--text-muted)">// DEPLOYMENT & STATUS TRACKING</div></div>
+      <div class="topbar-status"><div class="status-dot"></div></div>
+    </div>
+    <div class="page-content">
+      <div class="page-header">
+        <div class="page-header-left"><div class="page-title">TEAM ROSTER</div><div class="page-sub">// REAL-TIME DEPLOYMENT STATUS</div></div>
+        <div style="display:flex;gap:10px">
+          <button class="btn btn-ghost" data-roles="Admin, Emergency Operator" onclick="Modal.open('modal-assign')">ASSIGN TEAM</button>
+          <button class="btn btn-ghost" data-roles="Admin, Emergency Operator" id="btn-directory" onclick="openPersonnelDirectory()">PERSONNEL DIRECTORY</button>
+          <button class="btn btn-primary" data-roles="Admin" id="btn-create" onclick="openCreateTeamModal()">+ CREATE TEAM</button>
+          <button class="btn btn-accent" data-roles="Field Officer" onclick="Modal.open('modal-request-team')">REQUEST BACKUP</button>
+        </div>
+      </div>
+
+      <!-- Status filter -->
+      <div class="filter-bar">
+        <select class="form-control" id="f-status" onchange="loadTeams()">
+          <option value="">All Status</option>
+          <option>Available</option><option>Assigned</option><option>Busy</option><option>Standby</option>
+        </select>
+        <select class="form-control" id="f-type" onchange="loadTeams()">
+          <option value="">All Types</option>
+          <option>Medical</option><option>Fire</option><option>Rescue</option><option>Search</option>
+        </select>
+        <button class="btn btn-ghost" onclick="loadTeams()">↻ REFRESH</button>
+      </div>
+
+      <div class="teams-grid" id="teams-grid">
+        <div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted);font-family:var(--font-mono);font-size:11px">LOADING TEAMS...</div>
+      </div>
+
+      <!-- Pending Team Requests (Admin/Operator) -->
+      <div class="panel" data-roles="Admin, Emergency Operator" style="margin-bottom:20px">
+        <div class="panel-header flex-between">
+          <span class="panel-title">// Pending Team Requests</span>
+          <button class="btn btn-ghost btn-sm" onclick="loadTeamRequests()">↻</button>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>ID</th><th>Team Type</th><th>For Disaster</th><th>Urgency</th><th>Requested By</th><th>Justification</th><th>Time</th><th>Actions</th></tr></thead>
+            <tbody id="team-requests-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- My Request History has been moved to my-requests.html -->
+
+    </div>
+  </div>
+</div>
+
+<!-- Approve & Assign Modal -->
+<div id="modal-approve-assign" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">// APPROVE & ASSIGN TEAM</span><button class="btn btn-ghost btn-icon btn-sm" onclick="Modal.close('modal-approve-assign')">✕</button></div>
+    <div class="modal-body">
+      <div class="alert alert-info">Select an available team to deploy for this request.</div>
+      <div class="form-group"><label class="form-label">Available Teams of Requested Type</label>
+        <select id="approve-team-select" class="form-control"><option value="">Loading...</option></select></div>
+      <input type="hidden" id="approve-req-id" />
+      <input type="hidden" id="approve-event-id" />
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="Modal.close('modal-approve-assign')">CANCEL</button>
+      <button class="btn btn-primary" onclick="confirmApproveAndAssign()">APPROVE & DEPLOY</button>
+    </div>
+  </div>
+</div>
+
+<!-- Create Team Modal -->
+<div id="modal-create-team" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">// REGISTER NEW TEAM</span><button class="btn btn-ghost btn-icon btn-sm" onclick="Modal.close('modal-create-team')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-row form-row-2">
+        <div class="form-group"><label class="form-label">Team Name *</label><input id="ct-name" class="form-control" placeholder="Alpha Medical Unit"/></div>
+        <div class="form-group"><label class="form-label">Team Type *</label>
+          <select id="ct-type" class="form-control"><option value="">Select...</option><option>Medical</option><option>Fire</option><option>Rescue</option><option>Search</option></select></div>
+      </div>
+      <div class="form-row form-row-2">
+        <div class="form-group"><label class="form-label">Current Location</label><input id="ct-location" class="form-control" placeholder="Base Station A"/></div>
+        <div class="form-group"><label class="form-label">Assign Unassigned Personnel (Ctrl+Click)</label>
+          <select id="ct-members" class="form-control" multiple style="height:80px"></select>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="Modal.close('modal-create-team')">CANCEL</button>
+      <button class="btn btn-primary" onclick="createTeam()">CREATE TEAM</button>
+    </div>
+  </div>
+</div>
+
+<!-- Assign Modal — now uses Disasters instead of Reports -->
+<div id="modal-assign" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">// ASSIGN TEAM TO DISASTER</span><button class="btn btn-ghost btn-icon btn-sm" onclick="Modal.close('modal-assign')">✕</button></div>
+    <div class="modal-body">
+      <div class="alert alert-info">Assignment is a transaction — team status and disaster will update atomically.</div>
+      <div class="form-group"><label class="form-label">Select Team *</label>
+        <select id="assign-team" class="form-control"><option value="">Loading available teams...</option></select></div>
+      <div class="form-group"><label class="form-label">Target Disaster *</label>
+        <select id="assign-disaster" class="form-control"><option value="">Loading active disasters...</option></select></div>
+      <div class="form-group"><label class="form-label">Assignment Notes</label><textarea id="assign-notes" class="form-control" rows="2" placeholder="Deployment instructions..."></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="Modal.close('modal-assign')">CANCEL</button>
+      <button class="btn btn-primary" onclick="assignTeam()">DEPLOY TEAM</button>
+    </div>
+  </div>
+</div>
+
+<!-- Request Team Modal (Field Officer) -->
+<div id="modal-request-team" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">// REQUEST BACKUP TEAM</span><button class="btn btn-ghost btn-icon btn-sm" onclick="Modal.close('modal-request-team')">✕</button></div>
+    <div class="modal-body">
+      <div class="alert alert-info">This request will be sent to Admin/Operator for approval.</div>
+      <div class="form-row form-row-2">
+        <div class="form-group"><label class="form-label">Team Type Needed *</label>
+          <select id="rt-type" class="form-control"><option value="">Select...</option><option>Medical</option><option>Fire</option><option>Rescue</option><option>Search</option></select></div>
+        <div class="form-group"><label class="form-label">Urgency</label>
+          <select id="rt-urgency" class="form-control"><option>Normal</option><option>High</option><option>Critical</option></select></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">For Disaster *</label>
+        <select id="rt-disaster" class="form-control"><option value="">Loading disasters...</option></select>
+      </div>
+      <div class="form-group"><label class="form-label">Justification</label><textarea id="rt-justification" class="form-control" rows="2" placeholder="Describe why backup is needed..."></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="Modal.close('modal-request-team')">CANCEL</button>
+      <button class="btn btn-primary" onclick="submitTeamRequest()">SUBMIT REQUEST</button>
+    </div>
+  </div>
+</div>
+
+<!-- Register Personnel Modal -->
+<div id="modal-register-personnel" class="modal-overlay hidden" style="z-index: 2000;">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">// REGISTER PERSONNEL</span><button class="btn btn-ghost btn-icon btn-sm" onclick="Modal.close('modal-register-personnel')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-row form-row-2">
+        <div class="form-group"><label class="form-label">Full Name *</label><input id="rp-name" class="form-control" placeholder="John Doe"/></div>
+        <div class="form-group"><label class="form-label">Role</label>
+          <select id="rp-role" class="form-control"><option>Member</option><option>Leader</option><option>Medic</option><option>Driver</option><option>Specialist</option></select></div>
+      </div>
+      <div class="form-group"><label class="form-label">Contact Number</label><input id="rp-contact" class="form-control" placeholder="03XX-XXXXXXX"/></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="Modal.close('modal-register-personnel')">CANCEL</button>
+      <button class="btn btn-primary" onclick="registerPersonnel()">REGISTER MEMBER</button>
+    </div>
+  </div>
+</div>
+
+<!-- Personnel Directory Modal -->
+<div id="modal-personnel-registry" class="modal-overlay hidden">
+  <div class="modal" style="max-width:800px; max-height:90vh; display:flex; flex-direction:column;">
+    <div class="modal-header flex-between" style="flex-shrink:0;">
+      <span class="modal-title">// PERSONNEL DIRECTORY</span>
+      <div style="display:flex; gap:10px;">
+        <button class="btn btn-primary btn-sm" onclick="Modal.open('modal-register-personnel')">+ REGISTER</button>
+        <button class="btn btn-ghost btn-icon btn-sm" onclick="Modal.close('modal-personnel-registry')">✕</button>
+      </div>
+    </div>
+    <div class="modal-body" style="flex:1; overflow-y:auto;">
+      <div class="filter-bar" style="margin-bottom:15px; padding:10px; background:var(--bg); border:1px solid var(--border);">
+        <select id="pd-status" class="form-control" onchange="loadMembers()">
+          <option value="all">All Members</option>
+          <option value="unassigned">Unassigned Only</option>
+          <option value="assigned">Assigned Only</option>
+        </select>
+        <select id="pd-team" class="form-control" onchange="loadMembers()">
+          <option value="">All Teams</option>
+        </select>
+        <button class="btn btn-ghost btn-sm" onclick="loadMembers()">↻ Refresh</button>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="data-table">
+          <thead><tr><th>ID</th><th>Name</th><th>Role</th><th>Contact</th><th>Team Status</th><th>Actions</th></tr></thead>
+          <tbody id="members-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Assign Member to Team Modal -->
+<div id="modal-assign-member" class="modal-overlay hidden" style="z-index: 2000;">
+  <div class="modal modal-sm">
+    <div class="modal-header"><span class="modal-title">// ASSIGN TO TEAM</span><button class="btn btn-ghost btn-icon btn-sm" onclick="Modal.close('modal-assign-member')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="am-member-id" />
+      <div class="form-group"><label class="form-label">Select Team</label>
+        <select id="am-team-id" class="form-control"><option value="">Loading available teams...</option></select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="Modal.close('modal-assign-member')">CANCEL</button>
+      <button class="btn btn-primary" onclick="assignMemberSubmit()">ASSIGN</button>
+    </div>
+  </div>
+</div>
+
+<!-- Team History Modal -->
+<div id="modal-team-history" class="modal-overlay hidden">
+  <div class="modal" style="max-width:700px; max-height:85vh; display:flex; flex-direction:column;">
+    <div class="modal-header" style="flex-shrink:0;">
+      <span class="modal-title" id="history-modal-title">// TEAM DEPLOYMENT HISTORY</span>
+      <button class="btn btn-ghost btn-icon btn-sm" onclick="Modal.close('modal-team-history')">✕</button>
+    </div>
+    <div class="modal-body" style="flex:1; overflow-y:auto;">
+      <div style="overflow-x:auto">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Disaster</th>
+              <th>Location</th>
+              <th>Deployed At</th>
+              <th>Completed At</th>
+              <th>Mission Status</th>
+              <th>Disaster Status</th>
+            </tr>
+          </thead>
+          <tbody id="team-history-tbody">
+            <tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted);font-family:var(--font-mono);font-size:11px">LOADING...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/app.js"></script>
+<script>
+  if (!Auth.requireAuth()) throw new Error();
+  fetch('../components/sidebar.html').then(r=>r.text()).then(h=>{document.getElementById('sidebar-mount').innerHTML=h;Sidebar.init();});
+  const canCreate = Auth.hasRole(['Admin']);
+  const canUpdate = Auth.hasRole(['Admin', 'Emergency Operator']);
+  if (!canCreate) { document.getElementById('btn-create').style.display = 'none'; }
+
+  let teams = [];
+
+  async function loadTeams() {
+    const status = document.getElementById('f-status').value;
+    const type   = document.getElementById('f-type').value;
+    const params = new URLSearchParams();
+    if (status) params.set('status', status);
+    if (type)   params.set('type', type);
+
+    const res = await API.get(`/teams?${params}`);
+    if (!res.success) return;
+    teams = res.data;
+
+    const avail = teams.filter(t => t.Status === 'Available');
+    document.getElementById('assign-team').innerHTML =
+      '<option value="">Select available team...</option>' +
+      avail.map(t => `<option value="${t.TeamID}">${t.TeamName} — ${t.TeamType} (${t.MemberCount} members)</option>`).join('');
+
+    const grid = document.getElementById('teams-grid');
+    if (!teams.length) { grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted);font-family:var(--font-mono);font-size:11px">NO TEAMS FOUND</div>'; return; }
+
+    grid.innerHTML = teams.map(t => {
+      const statusClass = t.Status?.toLowerCase() || 'standby';
+      return `
+        <div class="team-card ${statusClass}">
+          <div class="team-header">
+            <div>
+              <div class="team-name">${t.TeamName}</div>
+              <div class="team-type">${t.TeamType} Unit</div>
+            </div>
+            ${Format.statusBadge(t.Status)}
+          </div>
+          <div class="team-meta">
+            <span>📍 ${t.CurrentLocation || 'Location unknown'}</span>
+            <span>👤 ${t.LeaderName || 'No leader assigned'}</span>
+            <span>👥 ${t.MemberCount || 0} members</span>
+            ${t.AssignedDisaster ? `<span style="color:var(--blue);font-weight:600">🌪️ DEPLOYED TO: ${t.AssignedDisaster}</span>` : ''}
+          </div>
+          ${canUpdate && t.Status !== 'On Mission' ? `
+          <div class="team-actions">
+            <button class="btn btn-ghost btn-sm" onclick="quickStatus(${t.TeamID},'Available')">✓ Available</button>
+            <button class="btn btn-ghost btn-sm" onclick="quickStatus(${t.TeamID},'Standby')">⏸ Standby</button>
+            <button class="btn btn-ghost btn-sm" style="color:var(--blue)" onclick="openTeamHistory(${t.TeamID},'${t.TeamName.replace(/'/g, "\\'")}')">📜 History</button>
+          </div>` : t.Status === 'On Mission' ? `
+          <div class="team-actions">
+            <div style="font-size:10px;font-family:var(--font-mono);color:var(--text-muted);text-transform:uppercase">// Locked: Under Deployment</div>
+            <button class="btn btn-ghost btn-sm" style="color:var(--blue)" onclick="openTeamHistory(${t.TeamID},'${t.TeamName.replace(/'/g, "\\'")}')">📜 History</button>
+          </div>` : ''}
+        </div>`;
+    }).join('');
+  }
+
+  async function quickStatus(id, status) {
+    const res = await API.put(`/teams/${id}/status`, { status });
+    if (res.success) { Toast.success(`Team set to ${status}`); loadTeams(); }
+    else Toast.error(res.message);
+  }
+
+  async function openCreateTeamModal() {
+    const res = await API.get('/teams/members?status=unassigned');
+    if (res.success) {
+      document.getElementById('ct-members').innerHTML = res.data.map(m => 
+        `<option value="${m.MemberID}">${m.MemberName} (${m.MemberRole})</option>`
+      ).join('');
+    }
+    Modal.open('modal-create-team');
+  }
+
+  async function createTeam() {
+    const select = document.getElementById('ct-members');
+    const memberIDs = Array.from(select.selectedOptions).map(opt => parseInt(opt.value));
+    
+    const body = {
+      teamName:      document.getElementById('ct-name').value.trim(),
+      teamType:      document.getElementById('ct-type').value,
+      currentLocation: document.getElementById('ct-location').value,
+      memberIDs:     memberIDs
+    };
+    if (!body.teamName || !body.teamType) return Toast.warning('Name and type required.');
+    const res = await API.post('/teams', body);
+    if (res.success) { 
+      Modal.close('modal-create-team'); 
+      Toast.success('Team created.'); 
+      loadTeams(); 
+      loadMembers();
+    }
+    else Toast.error(res.message);
+  }
+
+  async function assignTeam() {
+    const teamID  = document.getElementById('assign-team').value;
+    const eventID = document.getElementById('assign-disaster').value;
+    const notes   = document.getElementById('assign-notes').value;
+    if (!teamID || !eventID) return Toast.warning('Team and disaster required.');
+    const res = await API.post(`/teams/${teamID}/assign`, { eventID: parseInt(eventID), notes });
+    if (res.success) { Modal.close('modal-assign'); Toast.success('Team deployed successfully.'); loadTeams(); }
+    else Toast.error(res.message);
+  }
+
+  // Load active disasters into dropdowns
+  async function loadDisastersForDropdowns() {
+    try {
+      const res = await API.get('/disasters?status=Active,Assigned');
+      if (res.success && res.data.length) {
+        const opts = '<option value="">Select disaster...</option>' +
+          res.data.map(d => `<option value="${d.EventID}">EVT-${d.EventID} — ${d.DisasterType} @ ${d.Location} [${d.Status}]</option>`).join('');
+        document.getElementById('assign-disaster').innerHTML = opts;
+        document.getElementById('rt-disaster').innerHTML = opts;
+      } else {
+        const empty = '<option value="">No active disasters found</option>';
+        document.getElementById('assign-disaster').innerHTML = empty;
+        document.getElementById('rt-disaster').innerHTML = empty;
+      }
+    } catch (e) { console.error(e); }
+
+    // Auto-select disaster if coming from disasters page
+    const urlParams = new URLSearchParams(window.location.search);
+    const preselect = urlParams.get('eventID');
+    if (preselect) {
+      document.getElementById('assign-disaster').value = preselect;
+      Modal.open('modal-assign');
+    }
+  }
+
+  async function submitTeamRequest() {
+    const body = {
+      eventID:       parseInt(document.getElementById('rt-disaster').value, 10),
+      teamType:      document.getElementById('rt-type').value,
+      urgency:       document.getElementById('rt-urgency').value,
+      justification: document.getElementById('rt-justification').value,
+    };
+    if (!body.eventID || !body.teamType) return Toast.warning('Disaster and Team Type are required.');
+    const res = await API.post('/teams/request', body);
+    if (res.success) { Modal.close('modal-request-team'); Toast.success(res.message); }
+    else Toast.error(res.message);
+  }
+
+  // Pending Team Requests (Admin/Operator)
+  async function loadTeamRequests() {
+    const res = await API.get('/teams/requests?status=Pending');
+    if (!res || !res.success) return;
+    const canApprove = Auth.hasRole(['Admin', 'Emergency Operator']);
+    Table.render('team-requests-tbody', res.data, [
+      { key: 'ApprovalID', render: r => `<span class="font-mono" style="font-size:11px;color:var(--text-muted)">#${r.ApprovalID}</span>` },
+      { key: 'TeamType', render: r => r.TeamType || '—' },
+      { key: 'EventID', render: r => r.EventID ? `<span class="font-mono">EVT-${r.EventID}</span>` : '—' },
+      { key: 'Urgency', render: r => Format.badge(r.Urgency || 'Normal', (r.Urgency === 'Critical' ? 'critical' : r.Urgency === 'High' ? 'high' : 'low')) },
+      { key: 'RequestedBy', render: r => r.RequestedBy || '—' },
+      { key: 'Justification', render: r => r.Justification || '—' },
+      { key: 'RequestDate', render: r => Format.timeAgo(r.RequestDate) },
+      { key: 'actions', render: r => canApprove
+        ? `<button class="btn btn-primary btn-sm" onclick="openApproveModal(${r.ApprovalID},'${r.TeamType}','${r.EventID}')">✓ APPROVE</button>
+           <button class="btn btn-danger btn-sm" onclick="rejectTeamReq(${r.ApprovalID})">✕ REJECT</button>`
+        : '—' },
+    ]);
+  }
+
+  // Approve flow: show team picker modal
+  function openApproveModal(reqId, teamType, eventID) {
+    document.getElementById('approve-req-id').value = reqId;
+    document.getElementById('approve-event-id').value = eventID;
+    const avail = teams.filter(t => t.Status === 'Available' && t.TeamType === teamType);
+    document.getElementById('approve-team-select').innerHTML = avail.length
+      ? '<option value="">Select team...</option>' + avail.map(t => `<option value="${t.TeamID}">${t.TeamName} (${t.MemberCount} members)</option>`).join('')
+      : `<option value="">No available ${teamType} teams</option>`;
+    Modal.open('modal-approve-assign');
+  }
+
+  async function confirmApproveAndAssign() {
+    const reqId = document.getElementById('approve-req-id').value;
+    const teamID = document.getElementById('approve-team-select').value;
+    const eventID = document.getElementById('approve-event-id').value;
+    if (!teamID) return Toast.warning('Please select a team to deploy.');
+    
+    const res = await API.put(`/teams/requests/${reqId}/approve`, { action: 'approve' });
+    if (!res.success) return Toast.error(res.message);
+    
+    const res2 = await API.post(`/teams/${teamID}/assign`, { eventID: parseInt(eventID), notes: `Approved from request #${reqId}` });
+    if (res2.success) {
+      Modal.close('modal-approve-assign');
+      Toast.success('Request approved & team deployed!');
+      loadTeams(); loadTeamRequests();
+    } else Toast.error(res2.message);
+  }
+
+  async function rejectTeamReq(id) {
+    const res = await API.put(`/teams/requests/${id}/approve`, { action: 'reject' });
+    if (res.success) { Toast.success(res.message); loadTeamRequests(); }
+    else Toast.error(res.message);
+  }
+
+  // Personnel Management
+  async function openPersonnelDirectory() {
+    // Load teams for dropdown
+    const res = await API.get('/teams');
+    if (res.success) {
+      document.getElementById('pd-team').innerHTML = '<option value="">All Teams</option>' + 
+        res.data.map(t => `<option value="${t.TeamID}">${t.TeamName}</option>`).join('');
+    }
+    loadMembers();
+    Modal.open('modal-personnel-registry');
+  }
+
+  async function loadMembers() {
+    const status = document.getElementById('pd-status')?.value || 'all';
+    let url = `/teams/members?status=${status}`;
+    
+    const res = await API.get(url);
+    if (!res || !res.success) return;
+
+    let data = res.data;
+    // Client-side team filtering since API doesn't have ?teamID= yet (we can just filter here for speed)
+    const teamIDFilter = document.getElementById('pd-team')?.value;
+    if (teamIDFilter) {
+      data = data.filter(m => m.TeamID == teamIDFilter);
+    }
+    // Also filter assigned if 'assigned' is selected (backend only handles 'unassigned' specifically)
+    if (status === 'assigned') {
+      data = data.filter(m => m.TeamID !== null);
+    }
+
+    Table.render('members-tbody', data, [
+      { key: 'MemberID', render: r => `<span class="font-mono" style="font-size:11px;color:var(--text-muted)">#${r.MemberID}</span>` },
+      { key: 'MemberName', render: r => `<span style="font-weight:600">${r.MemberName}</span>` },
+      { key: 'MemberRole', render: r => r.MemberRole || '—' },
+      { key: 'MemberContact', render: r => r.MemberContact || '—' },
+      { key: 'TeamStatus', render: r => r.TeamName ? `<span class="font-mono" style="color:var(--blue)">${r.TeamName}</span>` : '<span style="color:var(--text-muted)">Unassigned</span>' },
+      { key: 'Actions', render: r => {
+          let html = '<div style="display:flex;gap:4px">';
+          if (r.TeamID) {
+            html += `<button class="btn btn-ghost btn-sm" style="color:var(--text-muted)" onclick="removeMember(${r.MemberID})">REMOVE FROM TEAM</button>`;
+          } else {
+            html += `<button class="btn btn-ghost btn-sm" style="color:var(--accent)" onclick="openAssignMemberModal(${r.MemberID})">ASSIGN TO TEAM</button>`;
+          }
+          html += `<button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="deleteMember(${r.MemberID})" title="Delete Member">🗑️</button></div>`;
+          return html;
+        }
+      }
+    ]);
+  }
+
+  async function registerPersonnel() {
+    const body = {
+      name: document.getElementById('rp-name').value.trim(),
+      role: document.getElementById('rp-role').value,
+      contact: document.getElementById('rp-contact').value.trim()
+    };
+    if (!body.name) return Toast.warning('Full name is required.');
+    
+    const res = await API.post('/teams/members', body);
+    if (res.success) {
+      Modal.close('modal-register-personnel');
+      Toast.success(res.message);
+      loadMembers();
+    } else Toast.error(res.message);
+  }
+
+  async function openAssignMemberModal(memberID) {
+    document.getElementById('am-member-id').value = memberID;
+    const res = await API.get('/teams');
+    if (res.success) {
+      document.getElementById('am-team-id').innerHTML = '<option value="">Select Team...</option>' + 
+        res.data.map(t => `<option value="${t.TeamID}">${t.TeamName} (${t.TeamType})</option>`).join('');
+    }
+    Modal.open('modal-assign-member');
+  }
+
+  async function assignMemberSubmit() {
+    const memberID = document.getElementById('am-member-id').value;
+    const teamID = document.getElementById('am-team-id').value;
+    if (!teamID) return Toast.warning('Please select a team.');
+
+    const res = await API.put(`/teams/members/${memberID}/assign`, { teamID: parseInt(teamID) });
+    if (res.success) {
+      Modal.close('modal-assign-member');
+      Toast.success(res.message);
+      loadMembers();
+      loadTeams(); // To update member count
+    } else Toast.error(res.message);
+  }
+
+  async function removeMember(memberID) {
+    const res = await API.put(`/teams/members/${memberID}/assign`, { teamID: null });
+    if (res.success) {
+      Toast.success('Member removed from team.');
+      loadMembers();
+      loadTeams();
+    } else Toast.error(res.message);
+  }
+
+  async function deleteMember(memberID) {
+    const res = await API.delete(`/teams/members/${memberID}`);
+    if (res.success) {
+      Toast.success(res.message);
+      loadMembers();
+      loadTeams();
+    } else Toast.error(res.message);
+  }
+
+  async function openTeamHistory(teamID, teamName) {
+    document.getElementById('history-modal-title').textContent = `// ${teamName} — DEPLOYMENT HISTORY`;
+    document.getElementById('team-history-tbody').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted);font-family:var(--font-mono);font-size:11px">LOADING...</td></tr>';
+    Modal.open('modal-team-history');
+
+    const res = await API.get(`/teams/${teamID}/history`);
+    if (!res.success) { Toast.error('Failed to load team history.'); return; }
+
+    const missionColors = { Active: 'blue', Completed: 'available', 'En Route': 'orange' };
+    const disasterColors = { Active: 'critical', Assigned: 'blue', Resolved: 'available', Closed: 'pending' };
+
+    Table.render('team-history-tbody', res.data, [
+      { key: 'DisasterType', render: r => `<span style="font-weight:700">${r.DisasterType}</span><br><span class="font-mono" style="font-size:10px;color:var(--text-muted)">EVT-${r.EventID}</span>` },
+      { key: 'DisasterLocation', render: r => r.DisasterLocation || '—' },
+      { key: 'AssignedAt', render: r => `<span class="font-mono" style="font-size:11px">${Format.datetime(r.AssignedAt)}</span>` },
+      { key: 'CompletedAt', render: r => r.CompletedAt ? `<span class="font-mono" style="font-size:11px">${Format.datetime(r.CompletedAt)}</span>` : '<span style="color:var(--text-muted)">—</span>' },
+      { key: 'Status', render: r => Format.badge(r.Status, missionColors[r.Status] || 'pending') },
+      { key: 'DisasterStatus', render: r => Format.badge(r.DisasterStatus, disasterColors[r.DisasterStatus] || 'pending') },
+    ]);
+  }
+
+  loadTeams();
+  loadDisastersForDropdowns();
+  loadTeamRequests();
+</script>
+</body>
+</html>

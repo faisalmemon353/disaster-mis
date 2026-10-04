@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DISMIS — Analytics</title>
+  <link rel="stylesheet" href="../assets/css/style.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <style>
+    .analytics-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+    .chart-box { position:relative; height:260px; }
+    .response-stat { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px; }
+    .response-val { font-family:var(--font-display); font-size:40px; font-weight:700; color:var(--accent); }
+    .response-label { font-family:var(--font-mono); font-size:11px; color:var(--text-muted); letter-spacing:1px; margin-top:4px; }
+    @media(max-width:960px) { .analytics-grid { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+  <div id="sidebar-mount"></div>
+  <div class="main-area">
+    <div class="topbar">
+      <div><div class="topbar-title">MIS ANALYTICS</div>
+      <div class="topbar-breadcrumb font-mono" style="font-size:10px;color:var(--text-muted)">// REPORTING & INTELLIGENCE</div></div>
+      <div class="topbar-status"><div class="status-dot"></div></div>
+    </div>
+
+    <div class="page-content">
+      <div class="page-header">
+        <div class="page-header-left"><div class="page-title">ANALYTICS & REPORTS</div><div class="page-sub">// OPERATIONAL INTELLIGENCE</div></div>
+      </div>
+
+      <!-- Response Time KPIs -->
+      <div class="panel" style="margin-bottom:20px">
+        <div class="panel-header"><span class="panel-title">// Response Time Analytics</span></div>
+        <div class="panel-body" style="display:grid;grid-template-columns:repeat(3,1fr)">
+          <div class="response-stat">
+            <div class="response-val" id="rt-avg">—</div>
+            <div class="response-label">AVG RESPONSE (MIN)</div>
+          </div>
+          <div class="response-stat" style="border-left:1px solid var(--border);border-right:1px solid var(--border)">
+            <div class="response-val" id="rt-min" style="color:var(--blue)">—</div>
+            <div class="response-label">BEST RESPONSE (MIN)</div>
+          </div>
+          <div class="response-stat">
+            <div class="response-val" id="rt-max" style="color:var(--orange)">—</div>
+            <div class="response-label">WORST RESPONSE (MIN)</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="analytics-grid">
+        <!-- Incidents by Type -->
+        <div class="panel">
+          <div class="panel-header"><span class="panel-title">// Incidents by Disaster Type</span></div>
+          <div class="panel-body"><div class="chart-box"><canvas id="chart-type"></canvas></div></div>
+        </div>
+        <!-- Severity Breakdown -->
+        <div class="panel">
+          <div class="panel-header"><span class="panel-title">// Severity Distribution</span></div>
+          <div class="panel-body"><div class="chart-box"><canvas id="chart-severity"></canvas></div></div>
+        </div>
+        <!-- 30-Day Trend -->
+        <div class="panel" style="grid-column:1/-1">
+          <div class="panel-header"><span class="panel-title">// 30-Day Incident Trend</span></div>
+          <div class="panel-body"><div class="chart-box" style="height:200px"><canvas id="chart-trend"></canvas></div></div>
+        </div>
+        <!-- Resource Usage -->
+        <div class="panel" style="grid-column:1/-1">
+          <div class="panel-header"><span class="panel-title">// Resource Utilization (Last 30 Days)</span></div>
+          <div style="overflow-x:auto">
+            <table class="data-table">
+              <thead><tr><th>Resource</th><th>Type</th><th>Allocated</th><th>Remaining</th><th>Utilization</th></tr></thead>
+              <tbody id="resource-usage-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/app.js"></script>
+<script>
+  if (!Auth.requireAuth()) throw new Error();
+  if (!Auth.hasRole(['Admin'])) {
+    Toast.error('Access denied.');
+    setTimeout(() => window.location.href = 'dashboard.html', 1200);
+  }
+  fetch('../components/sidebar.html').then(r=>r.text()).then(h=>{document.getElementById('sidebar-mount').innerHTML=h;Sidebar.init();});
+
+  Chart.defaults.color='#4a6278';
+  Chart.defaults.borderColor='rgba(255,255,255,0.05)';
+  Chart.defaults.font.family="'Share Tech Mono',monospace";
+  Chart.defaults.font.size=11;
+
+  async function loadAnalytics() {
+    const [incidents, usage] = await Promise.all([
+      API.get('/analytics/incidents'),
+      API.get('/analytics/resources-usage'),
+    ]);
+
+    if (incidents.success) {
+      const d = incidents.data;
+      // Response time
+      const rt = d.responseTime;
+      document.getElementById('rt-avg').textContent = rt?.avgResponseMinutes ? Math.round(rt.avgResponseMinutes) : '—';
+      document.getElementById('rt-min').textContent = rt?.minResponseMinutes ?? '—';
+      document.getElementById('rt-max').textContent = rt?.maxResponseMinutes ?? '—';
+
+      // By type
+      new Chart(document.getElementById('chart-type').getContext('2d'), {
+        type: 'bar',
+        data: { labels: d.byType.map(x=>x.DisasterType), datasets: [{ data: d.byType.map(x=>x.count), backgroundColor:'rgba(0,255,136,0.4)', borderColor:'#00ff88', borderWidth:1, borderRadius:4 }] },
+        options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}} },
+      });
+
+      // Severity doughnut
+      const sColors = { Critical:'#ff3b3b', High:'#ff8c00', Medium:'#ffd700', Low:'#00ff88' };
+      new Chart(document.getElementById('chart-severity').getContext('2d'), {
+        type: 'doughnut',
+        data: { labels: d.bySeverity.map(x=>x.SeverityLevel), datasets: [{ data:d.bySeverity.map(x=>x.count), backgroundColor:d.bySeverity.map(x=>sColors[x.SeverityLevel]||'#4a6278'), borderWidth:0 }] },
+        options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'bottom',labels:{padding:12}}}, cutout:'60%' },
+      });
+
+      // Trend line
+      new Chart(document.getElementById('chart-trend').getContext('2d'), {
+        type: 'line',
+        data: { labels:d.dailyTrend.map(x=>x.day.slice(5)), datasets:[{ data:d.dailyTrend.map(x=>x.count), borderColor:'#00a8ff', backgroundColor:'rgba(0,168,255,0.08)', fill:true, tension:0.4, pointRadius:2 }] },
+        options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}} },
+      });
+    }
+
+    if (usage.success) {
+      Table.render('resource-usage-tbody', usage.data, [
+        { key: 'ResourceName', render: r => `<strong>${r.ResourceName}</strong>` },
+        { key: 'ResourceType' },
+        { key: 'totalAllocated', render: r => `${Format.number(r.totalAllocated)} ${r.Unit}` },
+        { key: 'remaining',      render: r => `${Format.number(r.remaining)} ${r.Unit}` },
+        { key: 'utilization', render: r => {
+          const total = r.totalAllocated + r.remaining;
+          const pct = total > 0 ? Math.round((r.totalAllocated/total)*100) : 0;
+          const color = pct > 80 ? 'var(--red)' : pct > 50 ? 'var(--orange)' : 'var(--accent)';
+          return `<div style="display:flex;align-items:center;gap:8px">
+            <div style="flex:1;height:4px;background:var(--bg-elevated);border-radius:2px;overflow:hidden">
+              <div style="width:${pct}%;height:100%;background:${color};border-radius:2px"></div>
+            </div>
+            <span class="font-mono" style="font-size:11px;color:${color};min-width:36px">${pct}%</span>
+          </div>`;
+        }},
+      ]);
+    }
+  }
+
+  loadAnalytics();
+</script>
+</body>
+</html>

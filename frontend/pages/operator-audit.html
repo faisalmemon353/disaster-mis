@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>DISMIS — My Audit Log</title>
+  <link rel="stylesheet" href="../assets/css/style.css"/>
+</head>
+<body>
+<div class="app-shell">
+  <div id="sidebar-mount"></div>
+  <div class="main-area">
+    <div class="topbar">
+      <div><div class="topbar-title">MY ACTIVITY LOG</div>
+      <div class="topbar-breadcrumb font-mono" style="font-size:10px;color:var(--text-muted)">// PERSONAL AUDIT TRAIL</div></div>
+      <div class="topbar-status"><div class="status-dot"></div></div>
+    </div>
+    <div class="page-content">
+      <div class="page-header">
+        <div class="page-header-left"><div class="page-title">MY ACTION HISTORY</div><div class="page-sub">// APPROVALS, TEAMS, TRANSACTIONS</div></div>
+        <button class="btn btn-ghost" onclick="loadOperatorAudit()">↻ REFRESH</button>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header flex-between">
+          <span class="panel-title">// My Personal Activity Log</span>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>Category</th>
+                <th>Action</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody id="audit-tbody">
+              <tr><td colspan="4" style="text-align:center;padding:32px;color:var(--text-muted);font-family:var(--font-mono);font-size:11px">LOADING LOGS...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/app.js"></script>
+<script>
+  if (!Auth.requireAuth()) throw new Error();
+  if (!Auth.hasRole(['Emergency Operator', 'Warehouse Manager', 'Finance Officer'])) { window.location.href = 'dashboard.html'; }
+  fetch('../components/sidebar.html').then(r=>r.text()).then(h=>{document.getElementById('sidebar-mount').innerHTML=h;Sidebar.init();});
+
+  const actionColors = {
+    ASSIGN: 'blue', REGISTER: 'green', ADMIT: 'orange', DISCHARGE: 'yellow',
+    CREATE: 'available', UPDATE: 'blue', ALLOCATE: 'available',
+    Approved: 'available', Rejected: 'critical', TRANSACTION: 'warning'
+  };
+
+  async function loadOperatorAudit() {
+    const res = await API.get('/analytics/my-audit-log');
+    if (!res.success) return Toast.error('Failed to load activity log.');
+
+    Table.render('audit-tbody', res.data, [
+      { key: 'Timestamp', render: r => `<span class="font-mono" style="font-size:11px">${Format.datetime(r.Timestamp)}</span>` },
+      { key: 'ActionType', render: r => `<span class="font-mono" style="font-size:11px;color:var(--text-muted)">${r.ActionType}</span>` },
+      { key: 'Action', render: r => Format.badge(r.Action, actionColors[r.Action] || 'pending') },
+      { key: 'Details', render: r => `<span style="font-weight:600">${r.Details || '—'}</span>` },
+    ]);
+  }
+
+  loadOperatorAudit();
+</script>
+</body>
+</html>

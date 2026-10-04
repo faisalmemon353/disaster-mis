@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>DISMIS — Hospitals</title>
+  <link rel="stylesheet" href="../assets/css/style.css"/>
+  <style>
+    .hospital-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:16px; }
+    .hospital-card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px; transition:border-color .15s; }
+    .hospital-card:hover { border-color:var(--border-bright); }
+    .hosp-name { font-size:16px; font-weight:700; margin-bottom:4px; }
+    .hosp-location { font-family:var(--font-mono); font-size:10px; color:var(--text-muted); letter-spacing:.5px; margin-bottom:14px; }
+    .bed-row { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+    .bed-label { font-family:var(--font-mono); font-size:10px; color:var(--text-muted); text-transform:uppercase; }
+    .bed-count { font-family:var(--font-display); font-size:22px; font-weight:700; }
+    .bed-total { font-family:var(--font-mono); font-size:10px; color:var(--text-muted); }
+    .occ-bar { height:6px; background:var(--bg-elevated); border-radius:3px; overflow:hidden; margin-bottom:14px; }
+    .occ-fill { height:100%; border-radius:3px; transition:width .4s; }
+    .status-filter-bar { display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
+    .status-filter-bar button { font-family:var(--font-mono); font-size:10px; padding:6px 14px; border-radius:var(--radius); cursor:pointer; border:1px solid var(--border); background:transparent; color:var(--text-muted); transition:all .15s; }
+    .status-filter-bar button.active { background:var(--accent); color:var(--bg-base); border-color:var(--accent); }
+    .status-filter-bar button:hover:not(.active) { border-color:var(--border-bright); color:var(--text-primary); }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+  <div id="sidebar-mount"></div>
+  <div class="main-area">
+    <div class="topbar">
+      <div><div class="topbar-title">HOSPITAL COORDINATION</div>
+      <div class="topbar-breadcrumb font-mono" style="font-size:10px;color:var(--text-muted)">// BED AVAILABILITY & PATIENT LIFECYCLE</div></div>
+      <div class="topbar-status"><div class="status-dot"></div></div>
+    </div>
+    <div class="page-content">
+
+      <!-- ── Hospital Section ────────────────────────────────────── -->
+      <div class="page-header">
+        <div class="page-header-left"><div class="page-title">HOSPITAL NETWORK</div><div class="page-sub">// REAL-TIME CAPACITY TRACKING</div></div>
+        <div style="display:flex;gap:10px">
+          <button class="btn btn-ghost" onclick="findBestMatch()">🎯 BEST MATCH</button>
+          <button class="btn btn-primary" id="btn-add-hospital" style="display:none" onclick="Modal.open('modal-add-hosp')">+ REGISTER HOSPITAL</button>
+        </div>
+      </div>
+      <div id="best-match" class="alert alert-info hidden" style="margin-bottom:16px"></div>
+      <div class="hospital-grid" id="hospitals-grid">
+        <div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted);font-family:var(--font-mono);font-size:11px">LOADING...</div>
+      </div>
+
+      <!-- ── Patient Management Section ──────────────────────────── -->
+      <div class="page-header" style="margin-top:32px">
+        <div class="page-header-left"><div class="page-title">PATIENT MANAGEMENT</div><div class="page-sub">// REGISTER → ADMIT → DISCHARGE / ESCALATE</div></div>
+        <div style="display:flex;gap:10px" id="patient-actions" style="display:none">
+          <button class="btn btn-primary" onclick="openRegisterModal()">+ REGISTER PATIENT</button>
+          <button class="btn btn-ghost" onclick="loadPatients()">↻ REFRESH</button>
+        </div>
+      </div>
+
+      <!-- Status Filter Tabs -->
+      <div class="status-filter-bar">
+        <button class="active" onclick="filterPatients(this, '')">ALL</button>
+        <button onclick="filterPatients(this, 'Registered')">📝 REGISTERED</button>
+        <button onclick="filterPatients(this, 'Admitted')">🏥 ADMITTED</button>
+        <button onclick="filterPatients(this, 'Discharged')">✅ DISCHARGED</button>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header flex-between">
+          <span class="panel-title">// Patient Registry</span>
+          <span id="patient-count" class="font-mono" style="font-size:11px;color:var(--text-muted)"></span>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>NAME</th>
+                <th>STATUS</th>
+                <th>CONDITION</th>
+                <th>HOSPITAL</th>
+                <th>ORIGIN</th>
+                <th>ADMITTED</th>
+                <th>ACTIONS</th>
+              </tr>
+            </thead>
+            <tbody id="patients-tbody">
+              <tr><td colspan="8" style="text-align:center;padding:32px;color:var(--text-muted);font-family:var(--font-mono);font-size:11px">LOADING...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- MODALS                                                                 -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+
+<!-- Register Patient Modal -->
+<div id="modal-register" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">// REGISTER NEW PATIENT</span><button class="btn btn-ghost btn-icon btn-sm" onclick="Modal.close('modal-register')">✕</button></div>
+    <div class="modal-body">
+      <div id="reg-error" class="alert alert-error hidden"></div>
+      <div class="form-group"><label class="form-label">Patient Name *</label><input id="reg-name" class="form-control" placeholder="Full name"/></div>
+      <div class="form-group"><label class="form-label">Condition *</label>
+        <select id="reg-condition" class="form-control"><option value="">Select...</option><option>Critical</option><option>Serious</option><option>Stable</option><option>Minor</option></select></div>
+      <div class="form-group"><label class="form-label">Related Report ID</label>
+        <select id="reg-report" class="form-control"><option value="">None / Walk-in</option></select></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="Modal.close('modal-register')">CANCEL</button>
+      <button class="btn btn-primary" id="btn-register" onclick="registerPatient()">REGISTER PATIENT</button>
+    </div>
+  </div>
+</div>
+
+<!-- Admit Patient Modal -->
+<div id="modal-admit" class="modal-overlay hidden">
+  <div class="modal modal-sm">
+    <div class="modal-header"><span class="modal-title">// ADMIT TO HOSPITAL</span><button class="btn btn-ghost btn-icon btn-sm" onclick="Modal.close('modal-admit')">✕</button></div>
+    <div class="modal-body">
+      <div id="admit-error" class="alert alert-error hidden"></div>
+      <input type="hidden" id="adm-patient-id"/>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Admitting patient: <strong id="adm-patient-name"></strong></p>
+      <div class="form-group"><label class="form-label">Select Hospital *</label>
+        <select id="adm-hospital" class="form-control"><option value="">Select hospital...</option></select></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="Modal.close('modal-admit')">CANCEL</button>
+      <button class="btn btn-primary" onclick="admitPatient()">ADMIT NOW</button>
+    </div>
+  </div>
+</div>
+
+<!-- Escalate Patient Modal -->
+<div id="modal-escalate" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">// ESCALATE TO ANOTHER HOSPITAL</span><button class="btn btn-ghost btn-icon btn-sm" onclick="Modal.close('modal-escalate')">✕</button></div>
+    <div class="modal-body">
+      <div id="esc-error" class="alert alert-error hidden"></div>
+      <input type="hidden" id="esc-patient-id"/>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Transferring patient: <strong id="esc-patient-name"></strong></p>
+      <div class="form-group"><label class="form-label">Target Hospital *</label>
+        <select id="esc-hospital" class="form-control"><option value="">Select target hospital...</option></select></div>
+      <div class="form-group"><label class="form-label">Reason for Escalation</label>
+        <textarea id="esc-reason" class="form-control" rows="2" placeholder="e.g. Requires specialized care, ICU unavailable..."></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="Modal.close('modal-escalate')">CANCEL</button>
+      <button class="btn btn-primary" onclick="escalatePatient()">ESCALATE NOW</button>
+    </div>
+  </div>
+</div>
+
+<!-- Register Hospital Modal -->
+<div id="modal-add-hosp" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">// REGISTER NEW MEDICAL FACILITY</span><button class="btn btn-ghost btn-icon btn-sm" onclick="Modal.close('modal-add-hosp')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">Hospital Name *</label><input id="h-name" class="form-control" placeholder="e.g. Mayo Hospital"/></div>
+      <div class="form-group"><label class="form-label">Location *</label><input id="h-loc" class="form-control" placeholder="City, Area"/></div>
+      <div class="form-row form-row-2">
+        <div class="form-group"><label class="form-label">Contact Number</label><input id="h-contact" class="form-control" placeholder="03XXXXXXXXX"/></div>
+        <div class="form-group"><label class="form-label">Total Bed Capacity *</label><input id="h-beds" type="number" min="1" class="form-control" value="50"/></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="Modal.close('modal-add-hosp')">CANCEL</button>
+      <button class="btn btn-primary" onclick="submitNewHospital()">REGISTER NOW</button>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/app.js"></script>
+<script>
+  if (!Auth.requireAuth()) throw new Error();
+  fetch('../components/sidebar.html').then(r=>r.text()).then(h=>{document.getElementById('sidebar-mount').innerHTML=h;Sidebar.init();});
+  
+  const isAdminOrOp = Auth.hasRole(['Admin', 'Emergency Operator']);
+
+  // Role-based UI visibility
+  if (Auth.hasRole('Admin')) {
+    document.getElementById('btn-add-hospital').style.display = 'inline-block';
+  }
+  if (!isAdminOrOp) {
+    document.getElementById('patient-actions').style.display = 'none';
+  }
+
+  let allHospitals = [];
+  let allPatients = [];
+  let currentFilter = '';
+
+  // ─── HOSPITAL FUNCTIONS ────────────────────────────────────────────────
+
+  async function loadHospitals() {
+    const res = await API.get('/hospitals');
+    if (!res.success) return;
+    allHospitals = res.data;
+    populateHospitalDropdowns();
+    renderHospitals(allHospitals);
+  }
+
+  function populateHospitalDropdowns() {
+    const options = '<option value="">Select hospital...</option>' +
+      allHospitals.filter(h => h.AvailableBeds > 0).map(h =>
+        `<option value="${h.HospitalID}">${h.HospitalName} (${h.AvailableBeds} beds free)</option>`
+      ).join('');
+    document.getElementById('adm-hospital').innerHTML = options;
+    document.getElementById('esc-hospital').innerHTML = options;
+  }
+
+  function renderHospitals(hospitals) {
+    const grid = document.getElementById('hospitals-grid');
+    if (!hospitals.length) {
+      grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted);font-family:var(--font-mono);font-size:11px">NO HOSPITALS REGISTERED</div>';
+      return;
+    }
+    grid.innerHTML = hospitals.map(h => {
+      const occ = h.OccupancyRate || 0;
+      const occColor = occ > 85 ? 'var(--red)' : occ > 65 ? 'var(--orange)' : 'var(--accent)';
+      return `
+        <div class="hospital-card">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:4px">
+            <div class="hosp-name">${h.HospitalName}</div>
+            ${Format.badge(h.EmergencyStatus || 'Operational', h.EmergencyStatus === 'Operational' ? 'available' : 'critical')}
+          </div>
+          <div class="hosp-location">📍 ${h.Location}</div>
+          <div class="occ-bar"><div class="occ-fill" style="width:${occ}%;background:${occColor}"></div></div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+            <span class="font-mono" style="font-size:10px;color:var(--text-muted)">OCCUPANCY</span>
+            <span class="font-mono" style="font-size:12px;color:${occColor}">${occ}%</span>
+          </div>
+          <div class="bed-row">
+            <div><div class="bed-label">Available Beds</div><span class="bed-count" style="color:var(--accent)">${h.AvailableBeds}</span> <span class="bed-total">/ ${h.TotalBeds}</span></div>
+          </div>
+          <div style="margin-top:12px;font-family:var(--font-mono);font-size:11px;color:var(--text-muted)">
+            👥 ${h.currentPatients || 0} patients admitted &nbsp;|&nbsp; 📞 ${h.ContactNumber || 'N/A'}
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  function findBestMatch() {
+    const el = document.getElementById('best-match');
+    const functional = allHospitals.filter(h => h.EmergencyStatus === 'Functional' && h.AvailableBeds > 0);
+    if (!functional.length) {
+      el.textContent = 'No suitable hospitals available.';
+      el.classList.remove('hidden');
+      return;
+    }
+    const maxBeds = Math.max(...functional.map(h => h.AvailableBeds));
+    const bestMatches = functional.filter(h => h.AvailableBeds === maxBeds);
+    el.innerHTML = `🎯 BEST MATCHES FOUND: ${bestMatches.length} hospital(s) tied with ${maxBeds} available beds. <a href="#" onclick="document.getElementById('best-match').classList.add('hidden'); renderHospitals(allHospitals); return false;" style="color:white;text-decoration:underline;margin-left:10px;font-weight:bold">View All Hospitals</a>`;
+    el.classList.remove('hidden');
+    renderHospitals(bestMatches);
+  }
+
+  async function submitNewHospital() {
+    const body = {
+      name: document.getElementById('h-name').value.trim(),
+      location: document.getElementById('h-loc').value.trim(),
+      contact: document.getElementById('h-contact').value.trim(),
+      totalBeds: parseInt(document.getElementById('h-beds').value, 10),
+    };
+    if (!body.name || !body.location || isNaN(body.totalBeds) || body.totalBeds <= 0) return Toast.warning('Name, location and valid capacity required.');
+    const res = await API.post('/hospitals', body);
+    if (res.success) { Modal.close('modal-add-hosp'); Toast.success(res.message); loadHospitals(); }
+    else Toast.error(res.message);
+  }
+
+  // ─── PATIENT LIFECYCLE FUNCTIONS ───────────────────────────────────────
+
+  async function loadPatients() {
+    const params = currentFilter ? `?status=${currentFilter}` : '';
+    const res = await API.get(`/hospitals/patients${params}`);
+    if (!res.success) return Toast.error('Failed to load patients.');
+    allPatients = res.data;
+    document.getElementById('patient-count').textContent = `${allPatients.length} PATIENTS`;
+    renderPatients(allPatients);
+  }
+
+  function filterPatients(btn, status) {
+    document.querySelectorAll('.status-filter-bar button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentFilter = status;
+    loadPatients();
+  }
+
+  function renderPatients(patients) {
+    const tbody = document.getElementById('patients-tbody');
+    if (!patients.length) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--text-muted);font-family:var(--font-mono);font-size:11px">NO PATIENTS FOUND</td></tr>';
+      return;
+    }
+    tbody.innerHTML = patients.map(p => {
+      const origin = p.ReportID ? `Report #${p.ReportID}: ${p.DisasterType}` : 'Walk-in';
+      const admDate = p.AdmissionDate ? Format.timeAgo(p.AdmissionDate) : '—';
+
+      // Determine effective lifecycle status (handle legacy data)
+      const validStatuses = ['Registered', 'Admitted', 'Discharged'];
+      let effectiveStatus = p.CaseStatus;
+      if (!validStatuses.includes(p.CaseStatus)) {
+        // Legacy data: if has hospital, treat as Admitted; otherwise Registered
+        effectiveStatus = p.HospitalID ? 'Admitted' : 'Registered';
+      }
+
+      // Status badge styling
+      let statusClass = 'warning';
+      if (effectiveStatus === 'Registered') statusClass = 'info';
+      else if (effectiveStatus === 'Admitted') statusClass = 'warning';
+      else if (effectiveStatus === 'Discharged') statusClass = 'available';
+
+      // Medical condition badge
+      const condition = p.MedicalCondition || p.CaseStatus || '—';
+      let condClass = 'info';
+      if (condition === 'Critical') condClass = 'critical';
+      else if (condition === 'Serious') condClass = 'warning';
+      else if (condition === 'Stable') condClass = 'available';
+      else if (condition === 'Minor') condClass = 'info';
+
+      // Action buttons based on lifecycle status (only for Admin/Operator)
+      let actions = '<span style="color:var(--text-muted);font-size:12px">—</span>';
+      if (isAdminOrOp) {
+        if (effectiveStatus === 'Registered') {
+          actions = `<button class="btn btn-primary btn-sm" onclick="openAdmitModal(${p.PatientID}, '${p.PatientName.replace(/'/g, "\\'")}')">ADMIT</button>`;
+        } else if (effectiveStatus === 'Admitted') {
+          actions = `
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-accent btn-sm" onclick="openEscalateModal(${p.PatientID}, '${p.PatientName.replace(/'/g, "\\'")}')">ESCALATE</button>
+              <button class="btn btn-ghost btn-sm" style="border:1px solid var(--border)" onclick="dischargePatient(${p.PatientID}, '${p.PatientName.replace(/'/g, "\\'")}')">DISCHARGE</button>
+            </div>`;
+        } else {
+          actions = '<span class="font-mono" style="font-size:11px;color:var(--text-muted)">CLOSED</span>';
+        }
+      }
+
+      return `
+        <tr>
+          <td><span class="font-mono" style="color:var(--text-muted);font-size:11px">PT-${p.PatientID}</span></td>
+          <td style="font-weight:600">${p.PatientName}</td>
+          <td>${Format.badge(effectiveStatus, statusClass)}</td>
+          <td>${Format.badge(condition, condClass)}</td>
+          <td>${p.HospitalName || '<span style="color:var(--text-muted)">Not assigned</span>'}</td>
+          <td><span style="font-size:12px">${origin}</span></td>
+          <td><span class="font-mono" style="font-size:11px">${admDate}</span></td>
+          <td>${actions}</td>
+        </tr>`;
+    }).join('');
+  }
+
+  // ── Register ──
+  function openRegisterModal() {
+    document.getElementById('reg-name').value = '';
+    document.getElementById('reg-condition').value = '';
+    document.getElementById('reg-error').classList.add('hidden');
+    Modal.open('modal-register');
+  }
+
+  async function registerPatient() {
+    const errEl = document.getElementById('reg-error');
+    errEl.classList.add('hidden');
+    const body = {
+      patientName: document.getElementById('reg-name').value.trim(),
+      condition: document.getElementById('reg-condition').value,
+      reportID: document.getElementById('reg-report').value || null,
+    };
+    if (!body.patientName || !body.condition) {
+      errEl.textContent = 'Name and condition are required.';
+      errEl.classList.remove('hidden'); return;
+    }
+    const btn = document.getElementById('btn-register');
+    btn.textContent = 'REGISTERING...'; btn.disabled = true;
+    try {
+      const res = await API.post('/hospitals/patients/register', body);
+      if (res.success) {
+        Modal.close('modal-register');
+        Toast.success(`Patient ${body.patientName} registered successfully.`);
+        loadPatients();
+      } else {
+        errEl.textContent = res.message;
+        errEl.classList.remove('hidden');
+      }
+    } catch { errEl.textContent = 'Registration failed.'; errEl.classList.remove('hidden'); }
+    finally { btn.textContent = 'REGISTER PATIENT'; btn.disabled = false; }
+  }
+
+  // ── Admit ──
+  function openAdmitModal(patientId, patientName) {
+    document.getElementById('adm-patient-id').value = patientId;
+    document.getElementById('adm-patient-name').textContent = patientName;
+    document.getElementById('adm-hospital').value = '';
+    document.getElementById('admit-error').classList.add('hidden');
+    populateHospitalDropdowns(); // refresh bed counts
+    Modal.open('modal-admit');
+  }
+
+  async function admitPatient() {
+    const errEl = document.getElementById('admit-error');
+    errEl.classList.add('hidden');
+    const patientId = document.getElementById('adm-patient-id').value;
+    const hospitalId = document.getElementById('adm-hospital').value;
+    if (!hospitalId) {
+      errEl.textContent = 'Please select a hospital.';
+      errEl.classList.remove('hidden'); return;
+    }
+    const res = await API.post(`/hospitals/${hospitalId}/admit/${patientId}`);
+    if (res.success) {
+      Modal.close('modal-admit');
+      Toast.success(res.message);
+      loadHospitals();
+      loadPatients();
+    } else {
+      errEl.textContent = res.message;
+      errEl.classList.remove('hidden');
+    }
+  }
+
+  // ── Discharge ──
+  async function dischargePatient(patientId, patientName) {
+    const res = await API.put(`/hospitals/patients/${patientId}/discharge`);
+    if (res.success) {
+      Toast.success(res.message);
+      loadHospitals();
+      loadPatients();
+    } else Toast.error(res.message);
+  }
+
+  // ── Escalate ──
+  function openEscalateModal(patientId, patientName) {
+    document.getElementById('esc-patient-id').value = patientId;
+    document.getElementById('esc-patient-name').textContent = patientName;
+    document.getElementById('esc-hospital').value = '';
+    document.getElementById('esc-reason').value = '';
+    document.getElementById('esc-error').classList.add('hidden');
+    populateHospitalDropdowns();
+    Modal.open('modal-escalate');
+  }
+
+  async function escalatePatient() {
+    const errEl = document.getElementById('esc-error');
+    errEl.classList.add('hidden');
+    const patientId = document.getElementById('esc-patient-id').value;
+    const targetHospitalID = document.getElementById('esc-hospital').value;
+    const reason = document.getElementById('esc-reason').value.trim();
+    if (!targetHospitalID) {
+      errEl.textContent = 'Please select a target hospital.';
+      errEl.classList.remove('hidden'); return;
+    }
+    const res = await API.post(`/hospitals/patients/${patientId}/escalate`, { targetHospitalID, reason });
+    if (res.success) {
+      Modal.close('modal-escalate');
+      Toast.success(res.message);
+      loadHospitals();
+      loadPatients();
+    } else {
+      errEl.textContent = res.message;
+      errEl.classList.remove('hidden');
+    }
+  }
+
+  // ── Load Active Reports for dropdown ──
+  async function loadActiveReports() {
+    const res = await API.get('/reports/my-active');
+    if (!res.success) return;
+    document.getElementById('reg-report').innerHTML =
+      '<option value="">None / Walk-in</option>' +
+      res.data.map(r => `<option value="${r.ReportID}">Report #${r.ReportID} - ${r.DisasterType} @ ${r.Location}</option>`).join('');
+  }
+
+  // ─── INIT ──────────────────────────────────────────────────────────────
+  loadHospitals();
+  loadPatients();
+  loadActiveReports();
+</script>
+</body>
+</html>

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>DISMIS — My Requests</title>
+  <link rel="stylesheet" href="../assets/css/style.css"/>
+</head>
+<body>
+<div class="app-shell">
+  <div id="sidebar-mount"></div>
+  <div class="main-area">
+    <div class="topbar">
+      <div><div class="topbar-title">REQUEST HISTORY</div>
+      <div class="topbar-breadcrumb font-mono" style="font-size:10px;color:var(--text-muted)">// MY REQUEST LOG</div></div>
+      <div class="topbar-status"><div class="status-dot"></div></div>
+    </div>
+    <div class="page-content">
+      <div class="page-header">
+        <div class="page-header-left"><div class="page-title">MY SUBMITTED REQUESTS</div><div class="page-sub">// TEAMS & RESOURCES</div></div>
+        <button class="btn btn-ghost" onclick="loadMyRequestLog()">↻ REFRESH</button>
+      </div>
+
+      <!-- Field Officer: My Request History -->
+      <div class="panel">
+        <div class="panel-header"><span class="panel-title">// Request Log</span></div>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>ID</th><th>Type</th><th>Details</th><th>Urgency</th><th>Status</th><th>Submitted</th><th>Decision</th></tr></thead>
+            <tbody id="my-log-tbody">
+              <tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted);font-family:var(--font-mono);font-size:11px">LOADING...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/app.js"></script>
+<script>
+  if (!Auth.requireAuth()) throw new Error();
+  if (!Auth.hasRole(['Field Officer'])) {
+    Toast.error('Access denied.');
+    setTimeout(() => window.location.href = 'dashboard.html', 1200);
+  }
+  fetch('../components/sidebar.html').then(r=>r.text()).then(h=>{document.getElementById('sidebar-mount').innerHTML=h;Sidebar.init();});
+
+  async function loadMyRequestLog() {
+    const res = await API.get('/teams/requests/my-log');
+    if (!res || !res.success) return;
+    Table.render('my-log-tbody', res.data, [
+      { key: 'ApprovalID', render: r => `<span class="font-mono" style="font-size:11px;color:var(--text-muted)">#${r.ApprovalID}</span>` },
+      { key: 'RequestType' },
+      { key: 'Details', render: r => r.TeamType ? `${r.TeamType} for Disaster EVT-${r.EventID}` : `Resource request for EVT-${r.EventID}` },
+      { key: 'Urgency', render: r => Format.badge(r.Urgency || 'Normal', (r.Urgency === 'Critical' ? 'critical' : r.Urgency === 'High' ? 'high' : 'low')) },
+      { key: 'Status', render: r => Format.badge(r.Status, r.Status === 'Approved' ? 'active' : r.Status === 'Rejected' ? 'critical' : 'pending') },
+      { key: 'RequestDate', render: r => Format.timeAgo(r.RequestDate) },
+      { key: 'DecisionDate', render: r => r.DecisionDate ? Format.timeAgo(r.DecisionDate) : '—' },
+    ]);
+  }
+
+  loadMyRequestLog();
+</script>
+</body>
+</html>

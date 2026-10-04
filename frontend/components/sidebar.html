@@ -1,0 +1,72 @@
+<!-- Shared Sidebar — include this in every page via JS injection or copy-paste -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-icon">⚡ DISMIS</div>
+    <div class="logo-sub">DISASTER RESPONSE MIS</div>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Operations</div>
+    <div class="nav-item" data-page="dashboard.html" data-roles="Admin">
+      <span class="nav-icon">📊</span> Dashboard
+    </div>
+    <div class="nav-item" data-page="reports.html" data-roles="Admin,Emergency Operator">
+      <span class="nav-icon">🚨</span> Emergency Reports
+      <span class="nav-badge" id="badge-reports">0</span>
+    </div>
+    <div class="nav-item" data-page="disasters.html" data-roles="Admin,Emergency Operator,Field Officer">
+      <span class="nav-icon">🌪️</span> Disasters
+    </div>
+    <div class="nav-item" data-page="teams.html" data-roles="Admin,Emergency Operator,Field Officer">
+      <span class="nav-icon">🚑</span> Rescue Teams
+    </div>
+    <div class="nav-item" data-page="resources.html" data-roles="Admin,Warehouse Manager,Field Officer">
+      <span class="nav-icon">🏭</span> Warehouses
+      <span class="nav-badge hidden" id="badge-resources">0</span>
+    </div>
+    <div class="nav-item" data-page="my-requests.html" data-roles="Field Officer">
+      <span class="nav-icon">📩</span> My Requests
+    </div>
+    <div class="nav-item" data-page="hospitals.html" data-roles="Admin,Emergency Operator">
+      <span class="nav-icon">🏥</span> Hospitals
+    </div>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Management</div>
+    <div class="nav-item" data-page="finance.html" data-roles="Admin,Finance Officer">
+      <span class="nav-icon">💰</span> Finance
+    </div>
+    <div class="nav-item" data-page="approvals.html" data-roles="Admin">
+      <span class="nav-icon">✅</span> Approvals
+      <span class="nav-badge hidden" id="badge-approvals">0</span>
+    </div>
+    <div class="nav-item" data-page="analytics.html" data-roles="Admin">
+      <span class="nav-icon">📈</span> Analytics
+    </div>
+    <div class="nav-item" data-page="audit.html" data-roles="Admin">
+      <span class="nav-icon">🔍</span> Global Audit
+    </div>
+    <div class="nav-item" data-page="operator-audit.html" data-roles="Emergency Operator,Warehouse Manager,Finance Officer">
+      <span class="nav-icon">🛡️</span> My Audit Log
+    </div>
+  </div>
+
+  <div class="sidebar-section" data-roles="Admin">
+    <div class="sidebar-section-label">System</div>
+    <div class="nav-item" data-page="users.html" data-roles="Admin">
+      <span class="nav-icon">👥</span> Users
+    </div>
+  </div>
+
+  <div class="sidebar-footer">
+    <div class="user-card" id="user-card">
+      <div class="user-avatar">?</div>
+      <div class="user-info">
+        <div class="user-name">Loading...</div>
+        <div class="user-role">—</div>
+      </div>
+      <button class="btn btn-ghost btn-icon btn-sm" onclick="Sidebar.logout()" title="Logout" style="margin-left:auto">⏻</button>
+    </div>
+  </div>
+</aside>

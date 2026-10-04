@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DISMIS — Resources</title>
+  <link rel="stylesheet" href="../assets/css/style.css" />
+  <style>
+    .resource-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px,1fr)); gap:16px; margin-bottom:20px; }
+    .resource-card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:18px; position:relative; overflow:hidden; transition:border-color .15s; }
+    .resource-card:hover { border-color:var(--border-bright); }
+    .resource-card.low-stock { border-color:rgba(255,59,59,0.3); }
+    .resource-card.low-stock::before { content:''; position:absolute; top:0;left:0;right:0;height:2px; background:linear-gradient(90deg,transparent,var(--red),transparent); }
+    .resource-name { font-size:15px; font-weight:600; margin-bottom:4px; }
+    .resource-type { font-family:var(--font-mono); font-size:10px; color:var(--text-muted); letter-spacing:1px; text-transform:uppercase; margin-bottom:12px; }
+    .resource-qty { font-family:var(--font-display); font-size:28px; font-weight:700; line-height:1; }
+    .resource-qty.low { color:var(--red); }
+    .resource-qty.ok  { color:var(--accent); }
+    .resource-bar { height:4px; background:var(--bg-elevated); border-radius:2px; margin:10px 0; overflow:hidden; }
+    .resource-bar-fill { height:100%; border-radius:2px; transition:width .4s; }
+    .resource-warehouse { font-family:var(--font-mono); font-size:10px; color:var(--text-muted); }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+  <div id="sidebar-mount"></div>
+  <div class="main-area">
+    <div class="topbar">
+      <div>
+        <div class="topbar-title">WAREHOUSES & RESOURCES</div>
+        <div class="topbar-breadcrumb font-mono" style="font-size:10px;color:var(--text-muted)">// INVENTORY & ALLOCATION</div>
+      </div>
+      <div class="topbar-status"><div class="status-dot"></div><span id="sys-clock" class="font-mono" style="font-size:11px;color:var(--text-muted)"></span></div>
+    </div>
+
+    <div class="page-content">
+      <div class="page-header">
+        <div class="page-header-left">
+          <div class="page-title">WAREHOUSE INVENTORY</div>
+          <div class="page-sub">// WAREHOUSE TRACKING & ALLOCATION</div>
+        </div>
+        <div style="display:flex;gap:10px">
+          <button class="btn btn-ghost" id="btn-create-wh" data-roles="Admin" onclick="openCreateWarehouseModal()" style="border:1px solid var(--border)">+ CREATE WAREHOUSE</button>
+          <button class="btn btn-primary" id="btn-add-resource" onclick="openAddModal()">+ ADD STOCK</button>
+          <button class="btn btn-ghost" id="btn-request" onclick="openRequestModal()">REQUEST RESOURCES</button>
+          <button class="btn btn-ghost" id="btn-allocate" onclick="openAllocateModal()" style="border:1px solid var(--border)">ALLOCATE</button>
+        </div>
+      </div>
+
+      <!-- WAREHOUSES VIEW -->
+      <div id="view-warehouses">
+        <div class="resource-grid" id="wh-grid">
+          <div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted);font-family:var(--font-mono);font-size:11px">LOADING WAREHOUSES...</div>
+        </div>
+      </div>
+
+      <!-- INVENTORY VIEW -->
+      <div id="view-inventory" class="hidden">
+        <div style="margin-bottom:20px;">
+          <button class="btn btn-ghost" onclick="closeWarehouse()">← BACK TO WAREHOUSES</button>
+          <span style="font-family:var(--font-mono);font-size:14px;margin-left:15px;color:var(--accent)" id="inv-wh-name"></span>
+        </div>
+        
+        <!-- Stats -->
+      <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
+        <div class="stat-card orange"><div class="stat-label">Low Stock Alerts</div><div class="stat-value" id="s-lowstock">—</div><div class="stat-icon">⚠️</div></div>
+        <div class="stat-card blue"><div class="stat-label">Total Items</div><div class="stat-value" id="s-total">—</div><div class="stat-icon">📦</div></div>
+        <div class="stat-card green"><div class="stat-label">Warehouses</div><div class="stat-value" id="s-wh">—</div><div class="stat-icon">🏭</div></div>
+        <div class="stat-card yellow"><div class="stat-label">Pending Requests</div><div class="stat-value" id="s-pending">—</div><div class="stat-icon">📋</div></div>
+      </div>
+
+      <!-- Filters -->
+      <div class="filter-bar" style="margin-bottom:16px">
+        <select class="form-control" id="f-type" onchange="loadResources()">
+          <option value="">All Types</option>
+          <option>Food</option><option>Water</option><option>Medicine</option><option>Shelter</option><option>Equipment</option>
+        </select>
+        <label style="display:flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:11px;color:var(--text-muted);cursor:pointer">
+          <input type="checkbox" id="f-lowstock" onchange="loadResources()" style="accent-color:var(--accent)"> LOW STOCK ONLY
+        </label>
+        <button class="btn btn-ghost" onclick="loadResources()">↻ REFRESH</button>
+      </div>
+
+      <!-- Resource Cards -->
+      <div class="resource-grid" id="resource-grid">
+        <div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted);font-family:var(--font-mono);font-size:11px">LOADING INVENTORY...</div>
+      </div>
+
+      <!-- Pending Requests Table -->
+      <div class="panel" id="panel-requests" style="margin-bottom:20px">
+        <div class="panel-header flex-between">
+          <span class="panel-title">// Pending Resource Requests</span>
+          <button class="btn btn-ghost btn-sm" onclick="loadRequests()">↻</button>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>ID</th><th>Resource</th><th>Qty</th><th>Urgency</th><th>Requested By</th><th>Justification</th><th>Time</th><th>Actions</th></tr></thead>
+            <tbody id="requests-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Deployment & Consumption Tracking -->
+      <div class="panel">
+        <div class="panel-header flex-between">
+          <span class="panel-title">// Resource Deployment Tracking (Dispatched vs Consumed)</span>
+          <button class="btn btn-ghost btn-sm" onclick="loadAllocations()">↻ REFRESH</button>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Resource</th>
+                <th>Disaster #</th>
+                <th>Dispatched</th>
+                <th>Consumed</th>
+                <th>Status</th>
+                <th>Last Update</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="allocations-tbody">
+              <tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text-muted)">Loading deployments...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      </div> <!-- End Inventory View -->
+
+    </div>
+  </div>
+</div>
+
+<!-- Consumption Modal -->
+<div id="modal-consume" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">// RECORD CONSUMPTION</span><button class="btn btn-ghost btn-icon btn-sm" onclick="Modal.close('modal-consume')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="con-alloc-id" />
+      <div class="form-group">
+        <label class="form-label">Quantity Consumed *</label>
+        <input id="con-qty" type="number" min="1" class="form-control" placeholder="Amount used on site" />
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="Modal.close('modal-consume')">CANCEL</button>
+      <button class="btn btn-primary" onclick="submitConsumption()">SAVE RECORD</button>
+    </div>
+  </div>
+</div>
+
+<!-- Allocate Modal -->
+<div id="modal-allocate" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">// DIRECT ALLOCATION</span><button class="btn btn-ghost btn-icon btn-sm" onclick="Modal.close('modal-allocate')">✕</button></div>
+    <div class="modal-body">
+      <div id="alloc-error" class="alert alert-error hidden"></div>
+      <div class="form-group"><label class="form-label">Resource *</label>
+        <select id="alloc-resource" class="form-control"><option value="">Loading...</option></select></div>
+      <div class="form-row form-row-2">
+        <div class="form-group"><label class="form-label">Quantity *</label><input id="alloc-qty" type="number" min="1" class="form-control" placeholder="0" /></div>
+        <div class="form-group"><label class="form-label">Target Disaster *</label>
+          <select id="alloc-disaster" class="form-control"><option value="">Loading active disasters...</option></select></div>
+      </div>
+      <div class="form-group"><label class="form-label">Deployment Notes</label><textarea id="alloc-notes" class="form-control" rows="2" placeholder="e.g. Sent via Truck 04"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="Modal.close('modal-allocate')">CANCEL</button>
+      <button class="btn btn-primary" onclick="submitAllocation()">ALLOCATE NOW</button>
+    </div>
+  </div>
+</div>
+
+<!-- Request Modal -->
+<div id="modal-request" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">// REQUEST RESOURCES</span><button class="btn btn-ghost btn-icon btn-sm" onclick="Modal.close('modal-request')">✕</button></div>
+    <div class="modal-body">
+      <div class="alert alert-info">This request will be sent for approval before allocation.</div>
+      <div class="form-group"><label class="form-label">Resource *</label>
+        <select id="req-resource" class="form-control"><option value="">Loading...</option></select></div>
+      <div class="form-row form-row-2">
+        <div class="form-group"><label class="form-label">Quantity *</label><input type="number" id="req-qty" min="1" class="form-control" placeholder="10"/></div>
+        <div class="form-group"><label class="form-label">Urgency</label>
+          <select id="req-urgency" class="form-control"><option>Normal</option><option>High</option><option>Critical</option></select></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Target Disaster *</label>
+        <select id="req-disaster" class="form-control"><option value="">Loading active disasters...</option></select>
+      </div>
+      <div class="form-group"><label class="form-label">Justification</label><textarea id="req-justification" class="form-control" rows="2" placeholder="Why is this needed?"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="Modal.close('modal-request')">CANCEL</button>
+      <button class="btn btn-primary" onclick="submitRequest()">SUBMIT REQUEST</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add/Update Resource Modal -->
+<div id="modal-add-resource" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">// REGISTER NEW STOCK / ITEM</span><button class="btn btn-ghost btn-icon btn-sm" onclick="Modal.close('modal-add-resource')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-row form-row-2">
+        <div class="form-group"><label class="form-label">Item Name *</label><input id="add-name" class="form-control" placeholder="e.g. Surgical Masks" /></div>
+        <div class="form-group"><label class="form-label">Type</label>
+          <select id="add-type" class="form-control">
+            <option>Medicine</option><option>Food</option><option>Water</option><option>Shelter</option><option>Equipment</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row form-row-3">
+        <div class="form-group"><label class="form-label">Quantity *</label><input id="add-qty" type="number" class="form-control" value="0" /></div>
+        <div class="form-group"><label class="form-label">Unit</label><input id="add-unit" class="form-control" placeholder="Boxes/Liters" /></div>
+        <div class="form-group"><label class="form-label">Threshold</label><input id="add-threshold" type="number" class="form-control" value="10" /></div>
+      </div>
+      <div class="form-group"><label class="form-label">Warehouse *</label>
+        <select id="add-wh" class="form-control">
+          <option value="">Loading your warehouses...</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="Modal.close('modal-add-resource')">CANCEL</button>
+      <button class="btn btn-primary" onclick="submitNewStock()">SAVE STOCK</button>
+    </div>
+  </div>
+</div>
+
+<!-- Create Warehouse Modal -->
+<div id="modal-create-warehouse" class="modal-overlay hidden">
+  <div class="modal modal-sm">
+    <div class="modal-header"><span class="modal-title">// REGISTER WAREHOUSE</span><button class="btn btn-ghost btn-icon btn-sm" onclick="Modal.close('modal-create-warehouse')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">Warehouse Name *</label><input id="cw-name" class="form-control" placeholder="Sector G-9 Storage" /></div>
+      <div class="form-group"><label class="form-label">Location *</label><input id="cw-loc" class="form-control" placeholder="Islamabad" /></div>
+      <div class="form-group"><label class="form-label">Assign Manager (Optional)</label>
+        <select id="cw-mgr" class="form-control"><option value="">Loading Managers...</option></select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="Modal.close('modal-create-warehouse')">CANCEL</button>
+      <button class="btn btn-primary" onclick="submitWarehouse()">CREATE</button>
+    </div>
+  </div>
+</div>
+
+<!-- Assign Manager Modal -->
+<div id="modal-assign-warehouse" class="modal-overlay hidden">
+  <div class="modal modal-sm">
+    <div class="modal-header"><span class="modal-title">// ASSIGN MANAGER</span><button class="btn btn-ghost btn-icon btn-sm" onclick="Modal.close('modal-assign-warehouse')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="aw-id" />
+      <div class="form-group"><label class="form-label">Warehouse Name</label><input id="aw-name" class="form-control" disabled /></div>
+      <div class="form-group"><label class="form-label">Select Manager *</label>
+        <select id="aw-mgr" class="form-control"><option value="">Loading Managers...</option></select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="Modal.close('modal-assign-warehouse')">CANCEL</button>
+      <button class="btn btn-primary" onclick="submitAssignManager()">ASSIGN</button>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/app.js"></script>
+<script>
+  if (!Auth.requireAuth()) throw new Error();
+  fetch('../components/sidebar.html').then(r => r.text()).then(h => { document.getElementById('sidebar-mount').innerHTML = h; Sidebar.init(); });
+  Clock.start('sys-clock');
+
+  const canAllocate = Auth.hasRole(['Admin', 'Warehouse Manager']);
+  const canRequest  = Auth.hasRole(['Emergency Operator', 'Field Officer']); // Admin can allocate directly, so no need to request
+  if (!canAllocate) {
+    document.getElementById('btn-allocate').style.display = 'none';
+    document.getElementById('btn-add-resource').style.display = 'none';
+  }
+  if (!canRequest)  document.getElementById('btn-request').style.display = 'none';
+
+  let resourceList = [];
+  let currentWarehouseID = null;
+
+  async function loadWarehouses() {
+    document.getElementById('view-warehouses').classList.remove('hidden');
+    document.getElementById('view-inventory').classList.add('hidden');
+    
+    const res = await API.get('/resources/warehouses');
+    const grid = document.getElementById('wh-grid');
+    if (!res || !res.success || !res.data.length) {
+      grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted);font-family:var(--font-mono);font-size:11px">NO WAREHOUSES ASSIGNED TO YOU</div>';
+      return;
+    }
+
+    grid.innerHTML = res.data.map(w => `
+      <div class="resource-card" style="cursor:pointer" onclick="openWarehouse(${w.WarehouseID}, '${w.Name}')">
+        <div class="resource-name" style="font-size:18px;color:var(--accent)">${w.Name}</div>
+        <div class="resource-type" style="margin-top:5px;font-size:11px">📍 ${w.Location}</div>
+        <div class="resource-warehouse" style="margin-top:15px;display:flex;justify-content:space-between;align-items:center">
+          <span>Manager: <span style="color:var(--text-primary)">${w.ManagerName || 'Unassigned'}</span></span>
+          ${!w.ManagerName && Auth.hasRole('Admin') ? `<button class="btn btn-ghost btn-sm" style="border:1px solid var(--border)" onclick="event.stopPropagation(); openAssignModal(${w.WarehouseID}, '${w.Name.replace(/'/g, "\\'")}')">Assign Manager</button>` : ''}
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function openWarehouse(id, name) {
+    currentWarehouseID = id;
+    document.getElementById('view-warehouses').classList.add('hidden');
+    document.getElementById('view-inventory').classList.remove('hidden');
+    document.getElementById('inv-wh-name').textContent = `// ${name.toUpperCase()} INVENTORY`;
+    loadResources();
+  }
+
+  function closeWarehouse() {
+    currentWarehouseID = null;
+    loadWarehouses();
+  }
+
+  async function openAddModal() { 
+    Modal.open('modal-add-resource');
+    const res = await API.get('/resources/warehouses');
+    if (res.success) {
+      document.getElementById('add-wh').innerHTML = '<option value="">Select Warehouse...</option>' + 
+        res.data.map(w => `<option value="${w.WarehouseID}">${w.Name} (${w.Location})</option>`).join('');
+      
+      // If we are inside a specific warehouse, pre-select it
+      if (currentWarehouseID) {
+        document.getElementById('add-wh').value = currentWarehouseID;
+      }
+    }
+  }
+
+  async function openCreateWarehouseModal() {
+    Modal.open('modal-create-warehouse');
+    const res = await API.get('/users?role=Warehouse Manager');
+    if (res.success) {
+      document.getElementById('cw-mgr').innerHTML = '<option value="">Unassigned</option>' + 
+        res.data.map(u => `<option value="${u.UserID}">${u.Name} (${u.Email})</option>`).join('');
+    }
+  }
+
+  async function submitWarehouse() {
+    const body = {
+      name: document.getElementById('cw-name').value.trim(),
+      location: document.getElementById('cw-loc').value.trim(),
+      managerID: document.getElementById('cw-mgr').value || null
+    };
+    if (!body.name || !body.location) return Toast.warning('Name and location required.');
+
+    const res = await API.post('/resources/warehouses', body);
+    if (res.success) {
+      Modal.close('modal-create-warehouse');
+      Toast.success(res.message);
+      loadWarehouses();
+    } else Toast.error(res.message);
+  }
+
+  async function openAssignModal(id, name) {
+    document.getElementById('aw-id').value = id;
+    document.getElementById('aw-name').value = name;
+    Modal.open('modal-assign-warehouse');
+    const res = await API.get('/users?role=Warehouse Manager');
+    if (res.success) {
+      document.getElementById('aw-mgr').innerHTML = '<option value="">Select a Manager...</option>' + 
+        res.data.map(u => `<option value="${u.UserID}">${u.Name} (${u.Email})</option>`).join('');
+    }
+  }
+
+  async function submitAssignManager() {
+    const id = document.getElementById('aw-id').value;
+    const managerID = document.getElementById('aw-mgr').value;
+    if (!managerID) return Toast.warning('Please select a manager.');
+
+    const res = await API.patch(`/resources/warehouses/${id}/assign`, { managerID });
+    if (res.success) {
+      Modal.close('modal-assign-warehouse');
+      Toast.success(res.message);
+      loadWarehouses();
+    } else Toast.error(res.message);
+  }
+
+  async function loadResources() {
+    if (!currentWarehouseID) return;
+
+    const type    = document.getElementById('f-type').value;
+    const lowOnly = document.getElementById('f-lowstock').checked;
+    const params  = new URLSearchParams();
+    params.set('warehouseID', currentWarehouseID);
+    if (type)    params.set('type', type);
+    if (lowOnly) params.set('lowStock', 'true');
+
+    const [res, stats] = await Promise.all([
+      API.get(`/resources?${params}`),
+      API.get('/resources/stats/summary'),
+    ]);
+
+    loadRequests();
+    loadAllocations();
+
+    if (stats.success) {
+      const s = stats.data;
+      document.getElementById('s-lowstock').textContent = s.lowStockItems;
+      document.getElementById('s-total').textContent    = s.totalItems;
+      document.getElementById('s-wh').textContent       = s.activeWarehouses;
+      document.getElementById('s-pending').textContent  = s.pendingRequests;
+    }
+
+    if (!res.success) return;
+    resourceList = res.data;
+    populateResourceDropdowns();
+
+    const grid = document.getElementById('resource-grid');
+    if (!res.data.length) {
+      grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted);font-family:var(--font-mono);font-size:11px">NO ITEMS FOUND</div>';
+      return;
+    }
+    grid.innerHTML = res.data.map(r => {
+      const pct = Math.min(100, Math.round((r.CurrentQuantity / (r.MinimumThreshold * 3 || 1)) * 100));
+      const low = r.IsLowStock;
+      const barColor = low ? 'var(--red)' : pct > 60 ? 'var(--accent)' : 'var(--orange)';
+      return `
+        <div class="resource-card ${low ? 'low-stock' : ''}">
+          <div class="resource-name">${r.ResourceName}</div>
+          <div class="resource-type">${r.ResourceType}</div>
+          <div class="resource-qty ${low ? 'low' : 'ok'}">${Format.number(r.CurrentQuantity)}<span style="font-size:14px;font-family:var(--font-ui);color:var(--text-muted)"> ${r.Unit}</span></div>
+          <div class="resource-bar"><div class="resource-bar-fill" style="width:${pct}%;background:${barColor}"></div></div>
+          <div class="resource-warehouse">📍 ${r.WarehouseName} — ${r.WarehouseLocation}</div>
+          ${low ? '<div class="badge badge-critical" style="margin-top:10px">⚠ LOW STOCK</div>' : ''}
+          ${canAllocate ? `<button class="btn btn-ghost btn-sm" style="margin-top:12px;width:100%;border:1px solid var(--border)" onclick="openUpdateQtyModal(${r.ResourceID}, '${r.ResourceName}', '${r.Unit}')">UPDATE STOCK</button>` : ''}
+        </div>`;
+    }).join('');
+  }
+
+  function populateResourceDropdowns() {
+    const opts = resourceList.map(r => `<option value="${r.ResourceID}">${r.ResourceName} (${r.CurrentQuantity} ${r.Unit} — ${r.WarehouseName})</option>`).join('');
+    document.getElementById('alloc-resource').innerHTML = '<option value="">Select resource...</option>' + opts;
+    document.getElementById('req-resource').innerHTML   = '<option value="">Select resource...</option>' + opts;
+  }
+
+  async function loadRequests() {
+    if (!currentWarehouseID) return;
+    const res = await API.get(`/resources/request?status=Pending&warehouseID=${currentWarehouseID}`);
+    if (!res || !res.success) return;
+    const canApprove = Auth.hasRole(['Admin', 'Warehouse Manager']);
+    Table.render('requests-tbody', res.data, [
+      { key: 'RequestID', render: r => `<span class="font-mono" style="font-size:11px;color:var(--text-muted)">#${r.RequestID}</span>` },
+      { key: 'ResourceName' },
+      { key: 'RequestedQuantity' },
+      { key: 'Urgency', render: r => Format.badge(r.Urgency, r.Urgency === 'Critical' ? 'critical' : r.Urgency === 'High' ? 'high' : 'low') },
+      { key: 'RequestedBy' },
+      { key: 'Justification', render: r => r.Justification || '—' },
+      { key: 'RequestedAt',  render: r => Format.timeAgo(r.RequestedAt) },
+      { key: 'actions', render: r => canApprove
+        ? `<button class="btn btn-primary btn-sm" onclick="approveReq(${r.RequestID},'approve')">✓ APPROVE</button>
+           <button class="btn btn-danger btn-sm" onclick="approveReq(${r.RequestID},'reject')">✕ REJECT</button>`
+        : '—' },
+    ]);
+  }
+
+  async function approveReq(id, action) {
+    const res = await API.put(`/resources/request/${id}/approve`, { action });
+    if (res.success) { Toast.success(action === 'approve' ? 'Request approved & resources allocated.' : 'Request rejected.'); loadResources(); loadRequests(); }
+    else Toast.error(res.message);
+  }
+
+  function openAllocateModal() { Modal.open('modal-allocate'); }
+  function openRequestModal()  { Modal.open('modal-request');  }
+
+  async function submitAllocation() {
+    const errEl = document.getElementById('alloc-error');
+    errEl.classList.add('hidden');
+    const qty = parseInt(document.getElementById('alloc-qty').value, 10);
+    const body = {
+      resourceID: parseInt(document.getElementById('alloc-resource').value, 10),
+      quantity:   qty,
+      eventID:    document.getElementById('alloc-disaster').value || null,
+      notes:      document.getElementById('alloc-notes').value,
+    };
+    if (!body.resourceID || !Number.isInteger(body.quantity) || body.quantity <= 0) {
+      errEl.textContent = 'Resource and positive quantity are required.';
+      errEl.classList.remove('hidden');
+      return;
+    }
+    const res = await API.post('/resources/allocate', body);
+    if (res.success) { Modal.close('modal-allocate'); Toast.success(`Allocated. Remaining: ${Format.number(res.data.remaining)}`); loadResources(); }
+    else { errEl.textContent = res.message; errEl.classList.remove('hidden'); }
+  }
+
+  async function loadActiveDisasters() {
+    try {
+      const res = await API.get('/disasters?status=Active,Assigned');
+      if (res.success) {
+        if (!res.data || res.data.length === 0) {
+          const empty = '<option value="">No active disasters found</option>';
+          document.getElementById('req-disaster').innerHTML = empty;
+          document.getElementById('alloc-disaster').innerHTML = empty;
+          return;
+        }
+        const opts = '<option value="">Select disaster...</option>' +
+          res.data.map(d => `<option value="${d.EventID}">#${d.EventID} — ${d.DisasterType} at ${d.Location} [${d.Status}]</option>`).join('');
+        document.getElementById('req-disaster').innerHTML = opts;
+        document.getElementById('alloc-disaster').innerHTML = opts;
+      } else {
+        Toast.error(res.message || 'Failed to load disasters.');
+        document.getElementById('req-disaster').innerHTML = '<option value="">Error loading list</option>';
+        document.getElementById('alloc-disaster').innerHTML = '<option value="">Error loading list</option>';
+      }
+    } catch (e) {
+      Toast.error('Network error loading disasters.');
+      console.error(e);
+    }
+  }
+
+  async function submitRequest() {
+    const body = {
+      resourceID: parseInt(document.getElementById('req-resource').value, 10),
+      quantity: parseInt(document.getElementById('req-qty').value, 10),
+      justification: document.getElementById('req-justification').value,
+      urgency: document.getElementById('req-urgency').value,
+      eventID: parseInt(document.getElementById('req-disaster').value, 10),
+    };
+    if (!body.resourceID || !body.quantity || body.quantity <= 0 || !body.eventID) return Toast.warning('Resource, Disaster and positive quantity required.');
+    
+    const res = await API.post('/resources/request', body);
+    if (res.success) { Modal.close('modal-request'); Toast.success(res.message); loadRequests(); }
+    else Toast.error(res.message);
+  }
+
+  async function submitNewStock() {
+    const body = {
+      name: document.getElementById('add-name').value.trim(),
+      type: document.getElementById('add-type').value,
+      quantity: parseInt(document.getElementById('add-qty').value, 10),
+      unit: document.getElementById('add-unit').value.trim() || 'Units',
+      threshold: parseInt(document.getElementById('add-threshold').value, 10) || 10,
+      warehouseID: parseInt(document.getElementById('add-wh').value, 10),
+    };
+    if (!body.name || isNaN(body.quantity) || body.quantity <= 0) return Toast.warning('Name and positive quantity are required.');
+    const res = await API.post('/resources/stock-entry', body);
+    if (res.success) { Modal.close('modal-add-resource'); Toast.success(res.message); loadResources(); }
+    else Toast.error(res.message);
+  }
+
+  function openUpdateQtyModal(id, name, unit) {
+    document.getElementById('up-res-id').value = id;
+    document.getElementById('up-res-name').textContent = name;
+    document.getElementById('up-res-unit').textContent = unit;
+    document.getElementById('up-qty').value = '';
+    Modal.open('modal-update-qty');
+  }
+
+  async function submitUpdateQty() {
+    const id = document.getElementById('up-res-id').value;
+    const quantity = parseInt(document.getElementById('up-qty').value, 10);
+    if (!quantity || quantity <= 0) return Toast.warning('Please enter a positive quantity.');
+    
+    const res = await API.patch(`/resources/${id}/add-qty`, { quantity });
+    if (res.success) { Modal.close('modal-update-qty'); Toast.success(res.message); loadResources(); }
+    else Toast.error(res.message);
+  }
+
+  async function loadAllocations() {
+    if (!currentWarehouseID) return;
+    const res = await API.get(`/resources/allocations?warehouseID=${currentWarehouseID}`);
+    if (!res.success) return;
+    
+    Table.render('allocations-tbody', res.data, [
+      { key: 'ResourceName', render: r => `<span style="font-weight:600">${r.ResourceName}</span>` },
+      { key: 'EventID',     render: r => `<span class="font-mono" style="color:var(--text-muted)">#${r.EventID || r.ReportID || '-'}</span>` },
+      { key: 'QtyDispatched',render: r => `<span style="font-weight:700">${r.QtyDispatched}</span> <small style="color:var(--text-muted)">${r.Unit}</small>` },
+      { key: 'QtyConsumed',  render: r => {
+        const perc = Math.round((r.QtyConsumed / r.QtyDispatched) * 100) || 0;
+        return `
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-family:var(--font-mono);font-size:11px">${r.QtyConsumed} (${perc}%)</span>
+            <div style="flex:1;height:4px;background:var(--bg-elevated);border-radius:2px;overflow:hidden">
+              <div style="width:${perc}%;height:100%;background:var(--orange)"></div>
+            </div>
+          </div>`;
+      }},
+      { key: 'Status',         render: r => Format.badge(r.Status, r.Status === 'Dispatched' ? 'info' : 'success') },
+      { key: 'AllocationDate', render: r => `<span class="font-mono" style="font-size:10px">${Format.timeAgo(r.AllocationDate)}</span>` },
+      { key: 'action', render: r => {
+        const canConsume = Auth.hasRole('Field Officer');
+        if (r.QtyConsumed < r.QtyDispatched && canConsume) {
+          return `<button class="btn btn-ghost btn-sm" onclick="openConsumeModal(${r.AllocationID})">MARK CONSUMED</button>`;
+        }
+        return r.QtyConsumed >= r.QtyDispatched 
+          ? '<span style="color:var(--accent);font-size:10px;font-family:var(--font-mono)">COMPLETED</span>'
+          : '<span style="color:var(--text-muted);font-size:10px;font-family:var(--font-mono)">OFFICER ONLY</span>';
+      }}
+    ]);
+  }
+
+  function openConsumeModal(id) {
+    document.getElementById('con-alloc-id').value = id;
+    document.getElementById('con-qty').value = '';
+    Modal.open('modal-consume');
+  }
+
+  async function submitConsumption() {
+    const id = document.getElementById('con-alloc-id').value;
+    const qty = parseInt(document.getElementById('con-qty').value);
+    if (!qty || qty <= 0) return Toast.warning('Positive quantity required.');
+    
+    const res = await API.patch(`/resources/allocate/${id}/consume`, { quantity: qty });
+    if (res.success) {
+      Modal.close('modal-consume');
+      Toast.success(res.message);
+      loadAllocations();
+    } else Toast.error(res.message);
+  }
+
+  loadWarehouses();
+  loadActiveDisasters();
+</script>
+
+<!-- Update Quantity Modal -->
+<div id="modal-update-qty" class="modal-overlay hidden">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <span class="modal-title">// UPDATE STOCK QUANTITY</span>
+      <button class="btn btn-ghost btn-icon btn-sm" onclick="Modal.close('modal-update-qty')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:15px">Adding stock for: <b id="up-res-name" style="color:var(--text-primary)"></b></p>
+      <input type="hidden" id="up-res-id" />
+      <div class="form-group">
+        <label class="form-label">Quantity to Add (<span id="up-res-unit"></span>)</label>
+        <input type="number" id="up-qty" min="1" class="form-control" placeholder="Enter amount..." />
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="Modal.close('modal-update-qty')">CANCEL</button>
+      <button class="btn btn-primary" onclick="submitUpdateQty()">ADD TO STOCK</button>
+    </div>
+  </div>
+</div>
+</body>
+</html>

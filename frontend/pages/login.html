@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DISASTER MIS — LOGIN</title>
+  <link rel="stylesheet" href="../assets/css/style.css" />
+  <style>
+    body { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background:
+        radial-gradient(ellipse at 20% 50%, rgba(0,255,136,0.04) 0%, transparent 60%),
+        radial-gradient(ellipse at 80% 20%, rgba(0,168,255,0.04) 0%, transparent 60%);
+      pointer-events: none;
+    }
+    .grid-bg {
+      position: fixed; inset: 0;
+      background-image:
+        linear-gradient(rgba(0,255,136,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,255,136,0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+    }
+    .login-box {
+      width: 420px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-bright);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.6), 0 0 80px rgba(0,255,136,0.04);
+      position: relative; z-index:1;
+    }
+    .login-header {
+      padding: 32px 32px 24px;
+      text-align: center;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, var(--bg-panel) 0%, transparent 100%);
+    }
+    .login-logo {
+      font-family: var(--font-display);
+      font-size: 22px;
+      font-weight: 900;
+      color: var(--accent);
+      letter-spacing: 4px;
+      text-shadow: 0 0 20px rgba(0,255,136,0.4);
+    }
+    .login-tagline {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 2px;
+      color: var(--text-muted);
+      margin-top: 6px;
+    }
+    .login-body { padding: 28px 32px 32px; }
+    .login-title {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 3px;
+      color: var(--text-muted);
+      text-align: center;
+      margin-bottom: 24px;
+      text-transform: uppercase;
+    }
+    .btn-login {
+      width: 100%;
+      padding: 12px;
+      font-size: 14px;
+      letter-spacing: 2px;
+      margin-top: 8px;
+      justify-content: center;
+    }
+    .version-tag {
+      text-align: center;
+      margin-top: 20px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+    .demo-accounts {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px;
+      margin-bottom: 20px;
+    }
+    .demo-title {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      letter-spacing: 1.5px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .demo-item {
+      display: flex; justify-content: space-between;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-secondary);
+      padding: 3px 0;
+      cursor: pointer;
+      transition: color 0.1s;
+    }
+    .demo-item:hover { color: var(--accent); }
+    .demo-item span { color: var(--text-muted); }
+    .citizen-report-btn {
+      width: 100%;
+      padding: 14px;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      margin-bottom: 20px;
+      justify-content: center;
+      background: linear-gradient(135deg, var(--red), #ff4757);
+      border: none;
+      box-shadow: 0 4px 15px rgba(255, 71, 87, 0.3);
+    }
+    .citizen-report-btn:hover {
+      box-shadow: 0 6px 20px rgba(255, 71, 87, 0.5);
+      transform: translateY(-1px);
+    }
+    .or-divider {
+      display: flex; align-items: center; gap: 12px;
+      margin: 0 0 20px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+    .or-divider::before, .or-divider::after {
+      content: ''; flex: 1; height: 1px; background: var(--border);
+    }
+  </style>
+</head>
+<body>
+  <div class="grid-bg"></div>
+
+  <div class="login-box">
+    <div class="login-header">
+      <div class="login-logo">⚡ DISMIS</div>
+      <div class="login-tagline">SMART DISASTER RESPONSE — MANAGEMENT INFORMATION SYSTEM</div>
+    </div>
+    <div class="login-body">
+      <div class="login-title">// SECURE ACCESS PORTAL</div>
+
+      <div id="login-error" class="alert alert-error hidden"></div>
+
+      <!-- Citizen Emergency Report -->
+      <button class="btn btn-primary citizen-report-btn" onclick="openReportModal()">
+        🚨 REPORT EMERGENCY
+      </button>
+      <div class="or-divider">or sign in</div>
+
+      <div class="demo-accounts">
+        <div class="demo-title">Demo Credentials</div>
+        <div class="demo-item" onclick="fillCreds('admin@dismis.pk','Admin@123')">admin <span>Admin@123</span></div>
+        <div class="demo-item" onclick="fillCreds('operator@dismis.pk','Admin@123')">operator <span>Admin@123 · Emergency Operator</span></div>
+        <div class="demo-item" onclick="fillCreds('field01@dismis.pk','Admin@123')">field01 <span>Admin@123 · Field Officer</span></div>
+        <div class="demo-item" onclick="fillCreds('warehouse@dismis.pk','Admin@123')">warehouse <span>Admin@123 · Warehouse Manager</span></div>
+        <div class="demo-item" onclick="fillCreds('finance@dismis.pk','Admin@123')">finance <span>Admin@123 · Finance Officer</span></div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Username</label>
+        <input id="username" type="text" class="form-control" placeholder="Enter username" autocomplete="username" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input id="password" type="password" class="form-control" placeholder="••••••••" autocomplete="current-password" />
+      </div>
+
+      <button class="btn btn-primary btn-login" id="login-btn" onclick="doLogin()">
+        AUTHENTICATE
+      </button>
+      <div class="version-tag">v1.0.0 · DISMIS © 2026</div>
+    </div>
+  </div>
+
+  <!-- Citizen Emergency Report Modal -->
+  <div id="modal-public-report" class="modal-overlay hidden">
+    <div class="modal" style="max-width:520px">
+      <div class="modal-header">
+        <span class="modal-title">🚨 CITIZEN EMERGENCY REPORT</span>
+        <button class="btn btn-ghost btn-icon btn-sm" onclick="closeReportModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-error hidden" id="report-error"></div>
+        <div class="alert alert-success hidden" id="report-success"></div>
+        <div class="form-row form-row-2">
+          <div class="form-group">
+            <label class="form-label">Your Name</label>
+            <input id="pr-name" class="form-control" placeholder="Full name"/>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Contact Number</label>
+            <input id="pr-contact" class="form-control" placeholder="03XX-XXXXXXX"/>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Location *</label>
+          <input id="pr-location" class="form-control" placeholder="Street, area, city"/>
+        </div>
+        <div class="form-row form-row-2">
+          <div class="form-group">
+            <label class="form-label">Disaster Type *</label>
+            <select id="pr-type" class="form-control">
+              <option value="">Select type...</option>
+              <option>Flood</option>
+              <option>Earthquake</option>
+              <option>Fire</option>
+              <option>Cyclone</option>
+              <option>Landslide</option>
+              <option>Other</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Severity *</label>
+            <select id="pr-severity" class="form-control">
+              <option value="">Select severity...</option>
+              <option>Critical</option>
+              <option>High</option>
+              <option>Medium</option>
+              <option>Low</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Description</label>
+          <textarea id="pr-description" class="form-control" rows="3" placeholder="Describe the situation, number of people affected, immediate needs..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeReportModal()">CANCEL</button>
+        <button class="btn btn-critical" id="pr-submit-btn" onclick="submitPublicReport()">SUBMIT REPORT</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="../assets/js/app.js"></script>
+  <script>
+    if (Auth.isLoggedIn()) {
+      const u = Auth.getUser();
+      if (u) {
+        if (u.role === 'Warehouse Manager') window.location.href = 'resources.html';
+        else if (u.role === 'Emergency Operator') window.location.href = 'reports.html';
+        else if (u.role === 'Field Officer') window.location.href = 'disasters.html';
+        else if (u.role === 'Finance Officer') window.location.href = 'finance.html';
+        else window.location.href = 'dashboard.html';
+      }
+    }
+
+    function fillCreds(u, p) {
+      document.getElementById('username').value = u;
+      document.getElementById('password').value = p;
+    }
+
+    async function doLogin() {
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value;
+      const errEl = document.getElementById('login-error');
+      const btn = document.getElementById('login-btn');
+
+      errEl.classList.add('hidden');
+      if (!username || !password) {
+        errEl.textContent = 'Username and password are required.';
+        errEl.classList.remove('hidden');
+        return;
+      }
+
+      btn.textContent = 'AUTHENTICATING...';
+      btn.disabled = true;
+
+      try {
+        const res = await API.post('/auth/login', { username, password });
+        if (res.success) {
+          Auth.setSession(res.token, res.user);
+          if (res.user.role === 'Warehouse Manager') {
+            window.location.href = 'resources.html';
+          } else if (res.user.role === 'Emergency Operator') {
+            window.location.href = 'reports.html';
+          } else if (res.user.role === 'Field Officer') {
+            window.location.href = 'disasters.html';
+          } else if (res.user.role === 'Finance Officer') {
+            window.location.href = 'finance.html';
+          } else {
+            window.location.href = 'dashboard.html';
+          }
+        } else {
+          errEl.textContent = res.message || 'Authentication failed.';
+          errEl.classList.remove('hidden');
+        }
+      } catch (e) {
+        errEl.textContent = 'Server unreachable. Check backend connection.';
+        errEl.classList.remove('hidden');
+      } finally {
+        btn.textContent = 'AUTHENTICATE';
+        btn.disabled = false;
+      }
+    }
+
+    document.getElementById('password').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') doLogin();
+    });
+
+    // ─── Citizen Public Report ───────────────────────────────────────────────
+    function openReportModal() {
+      document.getElementById('pr-name').value = '';
+      document.getElementById('pr-contact').value = '';
+      document.getElementById('pr-location').value = '';
+      document.getElementById('pr-type').value = '';
+      document.getElementById('pr-severity').value = '';
+      document.getElementById('pr-description').value = '';
+      document.getElementById('report-error').classList.add('hidden');
+      document.getElementById('report-success').classList.add('hidden');
+      document.getElementById('modal-public-report').classList.remove('hidden');
+    }
+
+    function closeReportModal() {
+      document.getElementById('modal-public-report').classList.add('hidden');
+    }
+
+    async function submitPublicReport() {
+      const errEl = document.getElementById('report-error');
+      const sucEl = document.getElementById('report-success');
+      const btn = document.getElementById('pr-submit-btn');
+
+      const body = {
+        reporterName: document.getElementById('pr-name').value.trim(),
+        reporterContact: document.getElementById('pr-contact').value.trim(),
+        location: document.getElementById('pr-location').value.trim(),
+        disasterType: document.getElementById('pr-type').value,
+        severityLevel: document.getElementById('pr-severity').value,
+        description: document.getElementById('pr-description').value.trim(),
+      };
+
+      errEl.classList.add('hidden');
+      sucEl.classList.add('hidden');
+
+      if (!body.location || !body.disasterType || !body.severityLevel) {
+        errEl.textContent = 'Location, disaster type, and severity are required.';
+        errEl.classList.remove('hidden');
+        return;
+      }
+
+      if (body.reporterContact) {
+        const regex = /^03\d{2}-\d{7}$/;
+        if (!regex.test(body.reporterContact)) {
+          errEl.textContent = 'Contact Number must be in format 03XX-XXXXXXX';
+          errEl.classList.remove('hidden');
+          return;
+        }
+      }
+
+      btn.textContent = 'SUBMITTING...';
+      btn.disabled = true;
+
+      try {
+        const res = await fetch('/api/reports/public', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (data.success) {
+          sucEl.textContent = `Report #${data.data.ReportID} submitted successfully. Authorities have been notified.`;
+          sucEl.classList.remove('hidden');
+          setTimeout(() => closeReportModal(), 2500);
+        } else {
+          errEl.textContent = data.message || 'Failed to submit report.';
+          errEl.classList.remove('hidden');
+        }
+      } catch (e) {
+        errEl.textContent = 'Server unreachable. Please try again later.';
+        errEl.classList.remove('hidden');
+      } finally {
+        btn.textContent = 'SUBMIT REPORT';
+        btn.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>
+

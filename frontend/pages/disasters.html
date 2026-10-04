@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DISMIS — Disaster Operations</title>
+  <link rel="stylesheet" href="../assets/css/style.css" />
+  <style>
+    .type-group { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-lg); margin-bottom:16px; overflow:hidden; }
+    .type-group-header { display:flex; justify-content:space-between; align-items:center; padding:14px 18px; cursor:pointer; transition:background .15s; }
+    .type-group-header:hover { background:rgba(255,255,255,.02); }
+    .type-group-header .tg-left { display:flex; align-items:center; gap:12px; }
+    .type-group-header .tg-type { font-size:15px; font-weight:700; }
+    .type-group-header .tg-count { font-family:var(--font-mono); font-size:11px; color:var(--accent); background:rgba(0,255,136,.08); padding:2px 8px; border-radius:10px; }
+    .type-group-body { border-top:1px solid var(--border); }
+    .report-row { display:flex; align-items:center; gap:12px; padding:10px 18px; border-bottom:1px solid var(--border); font-size:13px; transition:background .1s; }
+    .report-row:last-child { border-bottom:none; }
+    .report-row:hover { background:rgba(255,255,255,.02); }
+    .report-row input[type=checkbox] { accent-color:var(--accent); width:16px; height:16px; }
+    .report-row .rr-id { font-family:var(--font-mono); font-size:11px; color:var(--text-muted); min-width:50px; }
+    .report-row .rr-loc { flex:1; }
+    .report-row .rr-sev { min-width:70px; }
+    .report-row .rr-time { font-family:var(--font-mono); font-size:11px; color:var(--text-muted); min-width:80px; }
+    .type-group-footer { padding:12px 18px; border-top:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,.15); }
+    .section-divider { font-family:var(--font-mono); font-size:11px; letter-spacing:2px; color:var(--text-muted); text-transform:uppercase; margin:28px 0 16px; padding-bottom:8px; border-bottom:1px solid var(--border); }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+  <div id="sidebar-mount"></div>
+
+  <div class="main-area">
+    <div class="topbar">
+      <div>
+        <div class="topbar-title">DISASTER OPERATIONS</div>
+        <div class="topbar-breadcrumb font-mono" style="font-size:10px;color:var(--text-muted)">// COMMAND CENTER</div>
+      </div>
+      <div class="topbar-status" style="gap:12px">
+        <div class="status-dot"></div>
+        <span id="sys-clock" class="font-mono" style="font-size:11px;color:var(--text-muted)"></span>
+      </div>
+    </div>
+
+    <div class="page-content">
+      <div class="page-header">
+        <div class="page-header-left">
+          <div class="page-title">DISASTER COMMAND</div>
+          <div class="page-sub">// CREATE DISASTERS FROM INCOMING REPORTS</div>
+        </div>
+        <button class="btn btn-ghost" onclick="loadAll()">↻ REFRESH</button>
+      </div>
+
+      <!-- PENDING REPORTS — Grouped by Disaster Type -->
+      <div data-roles="Admin, Emergency Operator">
+        <div class="section-divider">📋 PENDING REPORTS — SELECT TO CREATE DISASTER</div>
+        <div id="pending-groups">
+          <div style="text-align:center;padding:40px;color:var(--text-muted);font-family:var(--font-mono);font-size:11px">LOADING...</div>
+        </div>
+      </div>
+
+      <!-- ACTIVE DISASTERS -->
+      <div class="section-divider" style="margin-top:32px">🔴 ACTIVE DISASTERS</div>
+      <div class="panel">
+        <div class="panel-header flex-between">
+          <span class="panel-title">// Active Operations</span>
+          <span id="active-count" class="font-mono" style="font-size:11px;color:var(--text-muted)"></span>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>TYPE</th>
+                <th>LOCATION</th>
+                <th>STATUS</th>
+                <th>REPORTS</th>
+                <th>OFFICERS</th>
+                <th>TEAMS</th>
+                <th>STARTED</th>
+                <th>ACTIONS</th>
+              </tr>
+            </thead>
+            <tbody id="disasters-tbody">
+              <tr><td colspan="8" style="text-align:center;padding:32px;color:var(--text-muted);font-family:var(--font-mono);font-size:11px">LOADING...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- CLOSED DISASTERS (hidden by default) -->
+      <div style="margin-top:24px;display:flex;justify-content:space-between;align-items:center">
+        <div class="section-divider" style="margin:0;flex:1">✅ RESOLVED & CLOSED</div>
+        <button class="btn btn-ghost btn-sm" onclick="toggleClosed()" id="btn-toggle-closed" style="margin-left:12px">▼ VIEW CLOSED</button>
+      </div>
+      <div class="panel hidden" id="closed-panel">
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>TYPE</th>
+                <th>LOCATION</th>
+                <th>STATUS</th>
+                <th>REPORTS</th>
+                <th>DURATION</th>
+                <th>ACTIONS</th>
+              </tr>
+            </thead>
+            <tbody id="closed-tbody">
+              <tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-muted);font-family:var(--font-mono);font-size:11px">LOADING...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- View Reports Modal -->
+<div id="modal-reports" class="modal-overlay hidden">
+  <div class="modal" style="max-width:640px">
+    <div class="modal-header">
+      <span class="modal-title">// LINKED REPORTS</span>
+      <button class="btn btn-ghost btn-icon btn-sm" onclick="Modal.close('modal-reports')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="overflow-x:auto">
+        <table class="data-table">
+          <thead><tr><th>ID</th><th>Location</th><th>Severity</th><th>Reporter</th><th>Time</th><th>Status</th></tr></thead>
+          <tbody id="linked-reports-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="Modal.close('modal-reports')">CLOSE</button>
+    </div>
+  </div>
+</div>
+
+<!-- Assign Officer Modal (shown when creating disaster) -->
+<div id="modal-assign-officer" class="modal-overlay hidden">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <span class="modal-title">// ASSIGN FIELD OFFICER</span>
+      <button class="btn btn-ghost btn-icon btn-sm" onclick="Modal.close('modal-assign-officer')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:15px">Select a Field Officer to supervise this disaster operation:</p>
+      <input type="hidden" id="create-disaster-type" />
+      <div class="form-group">
+        <label class="form-label">Supervising Field Officer *</label>
+        <select id="create-officer" class="form-control"><option value="">Loading officers...</option></select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="Modal.close('modal-assign-officer')">CANCEL</button>
+      <button class="btn btn-primary" onclick="confirmCreateDisaster()">CREATE & ASSIGN</button>
+    </div>
+  </div>
+</div>
+
+<!-- Assign Additional Officer Modal -->
+<div id="modal-add-officer" class="modal-overlay hidden">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <span class="modal-title">// ADD FIELD OFFICER</span>
+      <button class="btn btn-ghost btn-icon btn-sm" onclick="Modal.close('modal-add-officer')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:15px">Assign an additional Field Officer to this disaster:</p>
+      <input type="hidden" id="add-officer-eventid" />
+      <div class="form-group">
+        <label class="form-label">Field Officer *</label>
+        <select id="add-officer-select" class="form-control"><option value="">Loading officers...</option></select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="Modal.close('modal-add-officer')">CANCEL</button>
+      <button class="btn btn-primary" onclick="submitAdditionalOfficer()">ASSIGN OFFICER</button>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/app.js"></script>
+<script>
+  if (!Auth.requireAuth()) throw new Error();
+  fetch('../components/sidebar.html').then(r => r.text()).then(html => { document.getElementById('sidebar-mount').innerHTML = html; Sidebar.init(); });
+  Clock.start('sys-clock');
+
+  const isAdminOrOp = Auth.hasRole(['Admin', 'Emergency Operator']);
+  const sevMap = { 5: 'Critical', 4: 'High', 3: 'Medium', 2: 'Low', 1: 'Low' };
+  const sevClass = { 5: 'critical', 4: 'high', 3: 'medium', 2: 'low', 1: 'low' };
+
+  function loadAll() { loadPendingReports(); loadDisasters(); loadClosed(); }
+
+  // ─── PENDING REPORTS GROUPED BY TYPE ───────────────────────────────────────
+
+  async function loadPendingReports() {
+    const res = await API.get('/disasters/pending-reports');
+    if (!res.success) return;
+    const container = document.getElementById('pending-groups');
+
+    if (!res.data.length) {
+      container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);font-family:var(--font-mono);font-size:11px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg)">NO PENDING REPORTS — ALL REPORTS HAVE BEEN PROCESSED</div>';
+      return;
+    }
+
+    container.innerHTML = res.data.map(group => `
+      <div class="type-group">
+        <div class="type-group-header" onclick="this.parentElement.querySelector('.type-group-body').classList.toggle('hidden')">
+          <div class="tg-left">
+            <span class="tg-type">${group.type}</span>
+            <span class="tg-count">${group.count} report${group.count > 1 ? 's' : ''}</span>
+          </div>
+          <span style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono)">▼ EXPAND</span>
+        </div>
+        <div class="type-group-body">
+          <div class="report-row" style="background:rgba(0,0,0,.2);font-weight:600;font-size:11px;font-family:var(--font-mono);color:var(--text-muted)">
+            <input type="checkbox" onchange="toggleAll(this, '${group.type}')" title="Select all" />
+            <span class="rr-id">ID</span>
+            <span class="rr-loc">LOCATION</span>
+            <span class="rr-sev">SEVERITY</span>
+            <span>REPORTER</span>
+            <span class="rr-time">TIME</span>
+          </div>
+          ${group.reports.map(r => `
+            <div class="report-row">
+              <input type="checkbox" class="report-check" data-type="${group.type}" data-id="${r.ReportID}" />
+              <span class="rr-id">#${r.ReportID}</span>
+              <span class="rr-loc">${r.Location}</span>
+              <span class="rr-sev">${Format.badge(sevMap[r.SeverityLevel] || 'Low', sevClass[r.SeverityLevel] || 'low')}</span>
+              <span>${r.ReporterName || '<span style="color:var(--text-muted)">Anonymous</span>'}</span>
+              <span class="rr-time">${Format.timeAgo(r.TimeOfReport)}</span>
+            </div>
+          `).join('')}
+        </div>
+        ${isAdminOrOp ? `
+        <div class="type-group-footer">
+          <span class="font-mono" style="font-size:11px;color:var(--text-muted)" id="sel-count-${group.type}">0 selected</span>
+          <button class="btn btn-primary btn-sm" onclick="createDisaster('${group.type}')">CREATE ${group.type.toUpperCase()} DISASTER</button>
+        </div>` : ''}
+      </div>
+    `).join('');
+
+    // Add change listeners to update selection count
+    document.querySelectorAll('.report-check').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const type = cb.dataset.type;
+        const count = document.querySelectorAll(`.report-check[data-type="${type}"]:checked`).length;
+        const el = document.getElementById(`sel-count-${type}`);
+        if (el) el.textContent = `${count} selected`;
+      });
+    });
+  }
+
+  function toggleAll(master, type) {
+    document.querySelectorAll(`.report-check[data-type="${type}"]`).forEach(cb => {
+      cb.checked = master.checked;
+    });
+    const count = master.checked ? document.querySelectorAll(`.report-check[data-type="${type}"]`).length : 0;
+    const el = document.getElementById(`sel-count-${type}`);
+    if (el) el.textContent = `${count} selected`;
+  }
+
+  async function createDisaster(type) {
+    const checked = document.querySelectorAll(`.report-check[data-type="${type}"]:checked`);
+    if (!checked.length) return Toast.warning('Select at least 1 report to create a disaster.');
+    // Store type and open officer selection modal
+    document.getElementById('create-disaster-type').value = type;
+    Modal.open('modal-assign-officer');
+  }
+
+  async function confirmCreateDisaster() {
+    const type = document.getElementById('create-disaster-type').value;
+    const officerID = document.getElementById('create-officer').value;
+    if (!officerID) return Toast.warning('Please select a Field Officer.');
+
+    const checked = document.querySelectorAll(`.report-check[data-type="${type}"]:checked`);
+    const reportIDs = [...checked].map(cb => parseInt(cb.dataset.id));
+
+    const res = await API.post('/disasters', { reportIDs, officerID: parseInt(officerID) });
+    if (res.success) {
+      Modal.close('modal-assign-officer');
+      Toast.success(res.message);
+      loadAll();
+    } else Toast.error(res.message);
+  }
+
+  async function loadOfficers() {
+    try {
+      const res = await API.get('/users?role=Field Officer');
+      if (res.success) {
+        document.getElementById('create-officer').innerHTML =
+          '<option value="">Select officer...</option>' +
+          res.data.map(u => `<option value="${u.UserID}">${u.Name} (${u.Email})</option>`).join('');
+      }
+    } catch (e) { console.error(e); }
+  }
+
+  // ─── DISASTER OPERATIONS TABLE ─────────────────────────────────────────────
+
+  async function loadDisasters() {
+    const res = await API.get('/disasters');
+    if (!res.success) return;
+    const active = res.data.filter(d => ['Active', 'Assigned'].includes(d.Status));
+    document.getElementById('active-count').textContent = `${active.length} ACTIVE`;
+
+    if (!active.length) {
+      document.getElementById('disasters-tbody').innerHTML = '<tr><td colspan="9" style="text-align:center;padding:32px;color:var(--text-muted);font-family:var(--font-mono);font-size:11px">NO ACTIVE DISASTERS</td></tr>';
+      return;
+    }
+
+    document.getElementById('disasters-tbody').innerHTML = active.map(d => {
+      const statusMap = { 'Active': 'active', 'Assigned': 'assigned' };
+      let actions = '';
+      if (isAdminOrOp) {
+        if (d.Status === 'Active') {
+          actions = `<a class="btn btn-accent btn-sm" href="teams.html?eventID=${d.EventID}">DEPLOY TEAM</a>
+                     <button class="btn btn-ghost btn-sm" onclick="openAddOfficerModal(${d.EventID})">+ OFFICER</button>`;
+        } else if (d.Status === 'Assigned') {
+          actions = `<button class="btn btn-primary btn-sm" onclick="resolveDisaster(${d.EventID})">RESOLVE</button>
+                     <button class="btn btn-ghost btn-sm" onclick="openAddOfficerModal(${d.EventID})">+ OFFICER</button>`;
+        }
+      }
+      return `
+        <tr>
+          <td><span class="font-mono" style="color:var(--text-muted);font-size:11px">EVT-${d.EventID}</span></td>
+          <td style="font-weight:600">${d.DisasterType}</td>
+          <td><span style="max-width:160px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${d.Location}</span></td>
+          <td>${Format.badge(d.Status, statusMap[d.Status] || 'pending')}</td>
+          <td><span class="font-mono">${d.ReportCount}</span></td>
+          <td><span style="max-width:140px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${d.OfficerNames || '<span style="color:var(--text-muted)">—</span>'}</span></td>
+          <td>${d.AssignedTeams || '<span style="color:var(--text-muted)">—</span>'}</td>
+          <td><span class="font-mono" style="font-size:11px">${Format.timeAgo(d.StartTime)}</span></td>
+          <td><div style="display:flex;gap:6px">${actions} <button class="btn btn-ghost btn-sm" onclick="viewReports(${d.EventID})">📋</button></div></td>
+        </tr>`;
+    }).join('');
+  }
+
+  async function loadClosed() {
+    const res = await API.get('/disasters');
+    if (!res.success) return;
+    const closed = res.data.filter(d => ['Resolved', 'Closed'].includes(d.Status));
+
+    if (!closed.length) {
+      document.getElementById('closed-tbody').innerHTML = '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-muted);font-family:var(--font-mono);font-size:11px">NO CLOSED DISASTERS</td></tr>';
+      return;
+    }
+
+    document.getElementById('closed-tbody').innerHTML = closed.map(d => {
+      const duration = d.EndTime ? `${Math.round((new Date(d.EndTime) - new Date(d.StartTime)) / 3600000)}h` : 'Ongoing';
+      let actions = '';
+      if (isAdminOrOp && d.Status === 'Resolved') {
+        actions = `<button class="btn btn-ghost btn-sm" style="border:1px solid var(--border)" onclick="closeDisaster(${d.EventID})">CLOSE FILE</button>`;
+      }
+      return `
+        <tr>
+          <td><span class="font-mono" style="color:var(--text-muted);font-size:11px">EVT-${d.EventID}</span></td>
+          <td>${d.DisasterType}</td>
+          <td>${d.Location}</td>
+          <td>${Format.badge(d.Status, d.Status === 'Resolved' ? 'resolved' : 'available')}</td>
+          <td><span class="font-mono">${d.ReportCount}</span></td>
+          <td><span class="font-mono" style="font-size:11px">${duration}</span></td>
+          <td><div style="display:flex;gap:6px">${actions} <button class="btn btn-ghost btn-sm" onclick="viewReports(${d.EventID})">📋</button></div></td>
+        </tr>`;
+    }).join('');
+  }
+
+  function toggleClosed() {
+    const panel = document.getElementById('closed-panel');
+    const btn = document.getElementById('btn-toggle-closed');
+    panel.classList.toggle('hidden');
+    btn.textContent = panel.classList.contains('hidden') ? '▼ VIEW CLOSED' : '▲ HIDE CLOSED';
+  }
+
+  // ─── ACTIONS ───────────────────────────────────────────────────────────────
+
+  async function resolveDisaster(eventID) {
+    const res = await API.post(`/disasters/${eventID}/resolve`);
+    if (res.success) { Toast.success(res.message); loadAll(); }
+    else Toast.error(res.message);
+  }
+
+  async function closeDisaster(eventID) {
+    const res = await API.put(`/disasters/${eventID}/status`, { status: 'Closed' });
+    if (res.success) { Toast.success(res.message); loadAll(); }
+    else Toast.error(res.message);
+  }
+
+  function openAddOfficerModal(eventID) {
+    document.getElementById('add-officer-eventid').value = eventID;
+    // Copy options from the other select
+    document.getElementById('add-officer-select').innerHTML = document.getElementById('create-officer').innerHTML;
+    Modal.open('modal-add-officer');
+  }
+
+  async function submitAdditionalOfficer() {
+    const eventID = document.getElementById('add-officer-eventid').value;
+    const officerID = document.getElementById('add-officer-select').value;
+    if (!officerID) return Toast.warning('Please select a Field Officer.');
+
+    const res = await API.post(`/disasters/${eventID}/officers`, { officerID: parseInt(officerID) });
+    if (res.success) {
+      Modal.close('modal-add-officer');
+      Toast.success(res.message);
+      loadDisasters();
+    } else Toast.error(res.message);
+  }
+
+  async function viewReports(eventID) {
+    const res = await API.get(`/disasters/${eventID}/reports`);
+    if (!res.success) return Toast.error('Failed to load reports.');
+    Table.render('linked-reports-tbody', res.data, [
+      { key: 'ReportID', render: r => `<span class="font-mono" style="font-size:11px;color:var(--text-muted)">#${r.ReportID}</span>` },
+      { key: 'Location', render: r => `<span style="max-width:140px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.Location}</span>` },
+      { key: 'SeverityLevel', render: r => Format.severityBadge(sevMap[r.SeverityLevel] || 'Low') },
+      { key: 'ReporterName', render: r => r.ReporterName || '<span style="color:var(--text-muted)">Anonymous</span>' },
+      { key: 'TimeOfReport', render: r => `<span class="font-mono" style="font-size:11px">${Format.timeAgo(r.TimeOfReport)}</span>` },
+      { key: 'Status', render: r => Format.statusBadge(r.Status) },
+    ]);
+    Modal.open('modal-reports');
+  }
+
+  loadAll();
+  loadOfficers();
+</script>
+</body>
+</html>

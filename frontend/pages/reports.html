@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DISMIS — Emergency Reports</title>
+  <link rel="stylesheet" href="../assets/css/style.css" />
+</head>
+<body>
+<div class="app-shell">
+  <div id="sidebar-mount"></div>
+
+  <div class="main-area">
+    <div class="topbar">
+      <div>
+        <div class="topbar-title">EMERGENCY REPORTS</div>
+        <div class="topbar-breadcrumb font-mono" style="font-size:10px;color:var(--text-muted)">// INCIDENT INTAKE</div>
+      </div>
+      <div class="topbar-status" style="gap:12px">
+        <div class="status-dot"></div>
+        <span id="sys-clock" class="font-mono" style="font-size:11px;color:var(--text-muted)"></span>
+      </div>
+    </div>
+
+    <div class="page-content">
+      <div class="page-header">
+        <div class="page-header-left">
+          <div class="page-title">INCIDENT REPORTS</div>
+          <div class="page-sub">// REPORT INTAKE — Operations handled in Disasters page</div>
+        </div>
+        <button class="btn btn-primary" onclick="openNewReportModal()">+ NEW REPORT</button>
+      </div>
+
+      <!-- Filters -->
+      <div class="filter-bar">
+        <select class="form-control" id="filter-status" onchange="loadReports()">
+          <option value="">All Status</option>
+          <option value="Pending">Pending</option>
+          <option value="Closed">Closed</option>
+        </select>
+        <select class="form-control" id="filter-severity" onchange="loadReports()">
+          <option value="">All Severity</option>
+          <option value="Critical">Critical</option>
+          <option value="High">High</option>
+          <option value="Medium">Medium</option>
+          <option value="Low">Low</option>
+        </select>
+        <select class="form-control" id="filter-type" onchange="loadReports()">
+          <option value="">All Types</option>
+          <option value="Flood">Flood</option>
+          <option value="Earthquake">Earthquake</option>
+          <option value="Fire">Fire</option>
+          <option value="Landslide">Landslide</option>
+          <option value="Hurricane">Hurricane</option>
+          <option value="Other">Other</option>
+        </select>
+        <button class="btn btn-ghost" onclick="loadReports()">↻ REFRESH</button>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header flex-between">
+          <span class="panel-title">// Report Registry</span>
+          <span id="report-count" class="font-mono" style="font-size:11px;color:var(--text-muted)"></span>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Disaster Type</th>
+                <th>Location</th>
+                <th>Severity</th>
+                <th>Status</th>
+                <th>Disaster</th>
+                <th>Reporter</th>
+                <th>Reported</th>
+              </tr>
+            </thead>
+            <tbody id="reports-tbody">
+              <tr><td colspan="8" style="text-align:center;padding:32px;color:var(--text-muted);font-family:var(--font-mono);font-size:11px">LOADING...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <!-- Pagination -->
+        <div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+          <span id="page-info" class="font-mono" style="font-size:11px;color:var(--text-muted)"></span>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-ghost btn-sm" id="btn-prev" onclick="changePage(-1)">← PREV</button>
+            <button class="btn btn-ghost btn-sm" id="btn-next" onclick="changePage(1)">NEXT →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- New Report Modal -->
+<div id="modal-new-report" class="modal-overlay hidden">
+  <div class="modal" style="max-width:640px">
+    <div class="modal-header">
+      <span class="modal-title">// FILE NEW EMERGENCY REPORT</span>
+      <button class="btn btn-ghost btn-icon btn-sm" onclick="Modal.close('modal-new-report')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="report-form-error" class="alert alert-error hidden"></div>
+      <div class="form-row form-row-2">
+        <div class="form-group">
+          <label class="form-label">Disaster Type *</label>
+          <select id="rpt-type" class="form-control">
+            <option value="">Select type...</option>
+            <option>Flood</option><option>Earthquake</option><option>Fire</option>
+            <option>Landslide</option><option>Hurricane</option><option>Other</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Severity Level *</label>
+          <select id="rpt-severity" class="form-control">
+            <option value="">Select severity...</option>
+            <option>Critical</option><option>High</option><option>Medium</option><option>Low</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Incident Location *</label>
+        <input id="rpt-location" class="form-control" placeholder="e.g. Sector G-9, Islamabad" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Description</label>
+        <textarea id="rpt-desc" class="form-control" rows="3" placeholder="Describe the situation..."></textarea>
+      </div>
+      <div class="form-row form-row-2">
+        <div class="form-group">
+          <label class="form-label">Reporter Name</label>
+          <input id="rpt-name" class="form-control" placeholder="Full name" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Reporter Contact</label>
+          <input id="rpt-contact" class="form-control" placeholder="03XX-XXXXXXX" />
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="Modal.close('modal-new-report')">CANCEL</button>
+      <button class="btn btn-primary" id="btn-submit-report" onclick="submitReport()">SUBMIT REPORT</button>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/app.js"></script>
+<script>
+  if (!Auth.requireAuth()) throw new Error();
+  fetch('../components/sidebar.html').then(r => r.text()).then(html => { document.getElementById('sidebar-mount').innerHTML = html; Sidebar.init(); });
+  Clock.start('sys-clock');
+
+  let currentPage = 1;
+  let totalPages = 1;
+
+  async function loadReports() {
+    const status   = document.getElementById('filter-status').value;
+    const severity = document.getElementById('filter-severity').value;
+    const type     = document.getElementById('filter-type').value;
+    const params   = new URLSearchParams({ page: currentPage, limit: 20 });
+    if (status)   params.set('status', status);
+    if (severity) params.set('severity', severity);
+    if (type)     params.set('type', type);
+
+    try {
+      const res = await API.get(`/reports?${params}`);
+      if (!res.success) return Toast.error(res.message);
+      const { data, pagination } = res;
+      totalPages = pagination.pages;
+
+      document.getElementById('report-count').textContent =
+        `${pagination.total} RECORDS · PAGE ${currentPage}/${totalPages}`;
+      document.getElementById('page-info').textContent =
+        `Showing ${data.length} of ${pagination.total}`;
+      document.getElementById('btn-prev').disabled = currentPage <= 1;
+      document.getElementById('btn-next').disabled = currentPage >= totalPages;
+
+      Table.render('reports-tbody', data, [
+        { key: 'ReportID', render: r => `<span class="font-mono" style="color:var(--text-muted);font-size:11px">#${r.ReportID}</span>` },
+        { key: 'DisasterType', render: r => `<span style="font-weight:600">${r.DisasterType}</span>` },
+        { key: 'Location', render: r => `<span style="max-width:160px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.Location}</span>` },
+        { key: 'SeverityLevel', render: r => Format.severityBadge(r.SeverityLevel) },
+        { key: 'Status',        render: r => Format.statusBadge(r.Status) },
+        { key: 'EventID',       render: r => r.EventID
+          ? `<span class="font-mono" style="font-size:11px;color:var(--blue)">EVT-${r.EventID}</span> ${Format.badge(r.DisasterStatus, r.DisasterStatus === 'Active' ? 'active' : r.DisasterStatus === 'Assigned' ? 'assigned' : 'resolved')}`
+          : '<span style="color:var(--text-muted);font-size:11px">Unlinked</span>' },
+        { key: 'ReporterName',  render: r => r.ReporterName || '<span style="color:var(--text-muted)">Unknown</span>' },
+        { key: 'ReportTime',    render: r => `<span class="font-mono" style="font-size:11px">${Format.timeAgo(r.ReportTime)}</span>` },
+      ]);
+    } catch (e) { Toast.error('Failed to load reports'); }
+  }
+
+  function changePage(dir) {
+    currentPage = Math.max(1, Math.min(totalPages, currentPage + dir));
+    loadReports();
+  }
+
+  function openNewReportModal() { Modal.open('modal-new-report'); }
+
+  async function submitReport() {
+    const errEl = document.getElementById('report-form-error');
+    errEl.classList.add('hidden');
+    const body = {
+      disasterType:    document.getElementById('rpt-type').value,
+      severityLevel:   document.getElementById('rpt-severity').value,
+      location:        document.getElementById('rpt-location').value.trim(),
+      description:     document.getElementById('rpt-desc').value.trim(),
+      reporterName:    document.getElementById('rpt-name').value.trim(),
+      reporterContact: document.getElementById('rpt-contact').value.trim(),
+    };
+    if (!body.disasterType || !body.severityLevel || !body.location) {
+      errEl.textContent = 'Type, severity and location are required.';
+      errEl.classList.remove('hidden');
+      return;
+    }
+    
+    // Validate Contact Number
+    if (body.reporterContact) {
+      const regex = /^03\d{2}-\d{7}$/;
+      if (!regex.test(body.reporterContact)) {
+        errEl.textContent = 'Contact Number must be in format 03XX-XXXXXXX';
+        errEl.classList.remove('hidden');
+        return;
+      }
+    }
+    const btn = document.getElementById('btn-submit-report');
+    btn.textContent = 'SUBMITTING...'; btn.disabled = true;
+    try {
+      const res = await API.post('/reports', body);
+      if (res.success) {
+        Modal.close('modal-new-report');
+        Toast.success('Emergency report submitted.');
+        loadReports();
+      } else {
+        errEl.textContent = res.message;
+        errEl.classList.remove('hidden');
+      }
+    } catch { errEl.textContent = 'Submission failed.'; errEl.classList.remove('hidden'); }
+    finally { btn.textContent = 'SUBMIT REPORT'; btn.disabled = false; }
+  }
+
+  loadReports();
+</script>
+</body>
+</html>

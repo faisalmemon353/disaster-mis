@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DISMIS — Finance</title>
+  <link rel="stylesheet" href="../assets/css/style.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="app-shell">
+  <div id="sidebar-mount"></div>
+  <div class="main-area">
+    <div class="topbar">
+      <div><div class="topbar-title">FINANCIAL MANAGEMENT</div>
+      <div class="topbar-breadcrumb font-mono" style="font-size:10px;color:var(--text-muted)">// AUDIT TRAIL & BUDGET TRACKING</div></div>
+      <div class="topbar-status"><div class="status-dot"></div></div>
+    </div>
+
+    <div class="page-content">
+      <div class="page-header">
+        <div class="page-header-left"><div class="page-title">FINANCIAL LEDGER</div><div class="page-sub">// TRANSACTIONS & BUDGET ANALYSIS</div></div>
+        <button class="btn btn-primary" onclick="Modal.open('modal-txn')">+ RECORD TRANSACTION</button>
+      </div>
+
+      <!-- Summary Cards -->
+      <div class="stats-grid" style="grid-template-columns:repeat(4,1fr)">
+        <div class="stat-card green"><div class="stat-label">Total Donations</div><div class="stat-value" id="s-donations" style="font-size:20px;padding-top:4px">—</div><div class="stat-icon">💚</div></div>
+        <div class="stat-card red"><div class="stat-label">Total Expenses</div><div class="stat-value" id="s-expenses" style="font-size:20px;padding-top:4px">—</div><div class="stat-icon">📉</div></div>
+        <div class="stat-card orange"><div class="stat-label">Procurement</div><div class="stat-value" id="s-procurement" style="font-size:20px;padding-top:4px">—</div><div class="stat-icon">🛒</div></div>
+        <div class="stat-card blue"><div class="stat-label">Net Balance</div><div class="stat-value" id="s-balance" style="font-size:20px;padding-top:4px">—</div><div class="stat-icon">💰</div></div>
+      </div>
+
+      <!-- Chart -->
+      <div class="panel" style="margin-bottom:20px">
+        <div class="panel-header"><span class="panel-title">// Monthly Financial Trend (6M)</span></div>
+        <div class="panel-body"><canvas id="chart-finance" style="height:220px"></canvas></div>
+      </div>
+
+      <!-- Transaction List -->
+      <div class="panel">
+        <div class="panel-header flex-between">
+          <span class="panel-title">// Transaction Ledger</span>
+          <div style="display:flex;gap:8px">
+            <select class="form-control" id="f-txn-type" onchange="loadTransactions()" style="width:140px">
+              <option value="">All Types</option>
+              <option>Donation</option><option>Expense</option><option>Procurement</option>
+            </select>
+            <button class="btn btn-ghost btn-sm" onclick="loadTransactions()">↻</button>
+          </div>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>ID</th><th>Type</th><th>Amount</th><th>Party Name</th><th>Category</th><th>Description</th><th>Event</th><th>Recorded By</th><th>Date</th></tr></thead>
+            <tbody id="txn-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Record Transaction Modal -->
+<div id="modal-txn" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">// RECORD TRANSACTION</span><button class="btn btn-ghost btn-icon btn-sm" onclick="Modal.close('modal-txn')">✕</button></div>
+    <div class="modal-body">
+      <div id="txn-error" class="alert alert-error hidden"></div>
+      <div class="form-row form-row-2">
+        <div class="form-group"><label class="form-label">Type *</label>
+          <select id="txn-type" class="form-control" onchange="handleTypeChange()">
+            <option value="">Select...</option><option>Donation</option><option>Expense</option><option>Procurement</option>
+          </select>
+        </div>
+        <div class="form-group"><label class="form-label">Amount (PKR) *</label><input id="txn-amount" type="number" min="1" class="form-control" placeholder="0.00" /></div>
+      </div>
+      <div class="form-row form-row-2" id="row-donor" style="display:none;">
+        <div class="form-group"><label class="form-label">Donor Type</label>
+          <select id="txn-donor-type" class="form-control">
+            <option value="Individual">Individual</option>
+            <option value="Organization">Organization</option>
+          </select>
+        </div>
+        <div class="form-group"><label class="form-label">Donor ID (CNIC / NTN)</label><input id="txn-donor-id" class="form-control" placeholder="Optional" /></div>
+      </div>
+      <div class="form-row form-row-2" id="row-donor-contact" style="display:none;">
+        <div class="form-group"><label class="form-label">Donor Contact</label><input id="txn-donor-contact" class="form-control" placeholder="Phone / Email (Optional)" /></div>
+      </div>
+      <div class="form-row form-row-2">
+        <div class="form-group"><label class="form-label">Category / Item</label><input id="txn-category" class="form-control" placeholder="e.g. Food Aid" /></div>
+        <div class="form-group"><label class="form-label">Disaster Event</label>
+          <select id="txn-event" class="form-control"><option value="">General Fund (No specific event)</option></select>
+        </div>
+      </div>
+      <div class="form-row form-row-2">
+        <div class="form-group"><label class="form-label">Party Name (Supplier / Donor / Vendor)</label><input id="txn-entity" class="form-control" placeholder="Optional" /></div>
+        <div class="form-group" id="group-qty" style="display:none;"><label class="form-label">Quantity</label><input id="txn-qty" type="number" min="1" class="form-control" placeholder="e.g. 50" /></div>
+      </div>
+      <div class="form-group"><label class="form-label">Description</label><textarea id="txn-desc" class="form-control" rows="2" placeholder="Details..."></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="Modal.close('modal-txn')">CANCEL</button>
+      <button class="btn btn-primary" onclick="submitTransaction()">RECORD</button>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/app.js"></script>
+<script>
+  if (!Auth.requireAuth()) throw new Error();
+  if (!Auth.hasRole(['Admin', 'Finance Officer'])) { Toast.error('Access denied.'); setTimeout(() => window.location.href='dashboard.html', 1500); }
+  fetch('../components/sidebar.html').then(r => r.text()).then(h => { document.getElementById('sidebar-mount').innerHTML = h; Sidebar.init(); });
+
+  Chart.defaults.color = '#4a6278';
+  Chart.defaults.borderColor = 'rgba(255,255,255,0.05)';
+  Chart.defaults.font.family = "'Share Tech Mono', monospace";
+  let finChart;
+
+  function handleTypeChange() {
+    const val = document.getElementById('txn-type').value;
+    document.getElementById('row-donor').style.display = val === 'Donation' ? 'flex' : 'none';
+    document.getElementById('row-donor-contact').style.display = val === 'Donation' ? 'flex' : 'none';
+    document.getElementById('group-qty').style.display = val === 'Procurement' ? 'block' : 'none';
+  }
+
+  async function loadEvents() {
+    const res = await API.get('/finance/events');
+    if (!res.success) return;
+    document.getElementById('txn-event').innerHTML = '<option value="">General Fund (No specific event)</option>' + 
+      res.data.map(e => `<option value="${e.EventID}">${e.DisasterType} @ ${e.Location} [${e.Status}]</option>`).join('');
+  }
+
+  async function loadSummary() {
+    const res = await API.get('/finance/summary');
+    if (!res.success) return;
+    const d = res.data;
+    document.getElementById('s-donations').textContent   = Format.currency(d.totalDonations);
+    document.getElementById('s-expenses').textContent    = Format.currency(d.totalExpenses);
+    document.getElementById('s-procurement').textContent = Format.currency(d.totalProcurement);
+    document.getElementById('s-balance').textContent     = Format.currency(d.netBalance);
+
+    // Chart
+    const trend = d.monthlyTrend || [];
+    const ctx = document.getElementById('chart-finance').getContext('2d');
+    if (finChart) finChart.destroy();
+    finChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: trend.map(t => t.Month),
+        datasets: [
+          { label: 'Donations', data: trend.map(t => t.donations), backgroundColor: 'rgba(0,255,136,0.4)', borderColor: '#00ff88', borderWidth: 1, borderRadius: 4 },
+          { label: 'Expenses',  data: trend.map(t => t.expenses),  backgroundColor: 'rgba(255,59,59,0.3)',  borderColor: '#ff3b3b', borderWidth: 1, borderRadius: 4 },
+        ],
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { padding: 16 } } }, scales: { y: { beginAtZero: true } } },
+    });
+  }
+
+  async function loadTransactions() {
+    const type = document.getElementById('f-txn-type').value;
+    const params = new URLSearchParams({ limit: 30 });
+    if (type) params.set('type', type);
+    const res = await API.get(`/finance/transactions?${params}`);
+    if (!res.success) return;
+    const typeColors = { Donation: 'green', Expense: 'red', Procurement: 'orange', Transfer: 'blue' };
+    Table.render('txn-tbody', res.data, [
+      { key: 'TransactionID', render: r => `<span class="font-mono" style="font-size:11px;color:var(--text-muted)">#${r.TransactionID}</span>` },
+      { key: 'TransactionType', render: r => Format.badge(r.TransactionType, typeColors[r.TransactionType] || 'pending') },
+      { key: 'Amount', render: r => `<span style="font-weight:600;font-family:var(--font-mono)">${Format.currency(r.Amount, r.Currency)}</span>` },
+      { key: 'PartyName', render: r => {
+          let str = r.PartyName || '—';
+          if (r.TransactionType === 'Donation' && r.DonorType) {
+            str += ` <span style="font-size:10px;color:var(--text-muted)">(${r.DonorType})</span>`;
+          }
+          return `<span style="font-weight:bold">${str}</span>`;
+      } },
+      { key: 'Category', render: r => r.Category || '—' },
+      { key: 'Description', render: r => `<span style="max-width:200px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.Description || '—'}</span>` },
+      { key: 'DisasterEvent', render: r => r.DisasterEvent || '—' },
+      { key: 'RecordedBy' },
+      { key: 'TransactionDate', render: r => Format.datetime(r.TransactionDate) },
+    ]);
+  }
+
+  async function submitTransaction() {
+    const errEl = document.getElementById('txn-error');
+    errEl.classList.add('hidden');
+    const amount = parseFloat(document.getElementById('txn-amount').value);
+    const body = {
+      transactionType: document.getElementById('txn-type').value,
+      amount,
+      category:   document.getElementById('txn-category').value,
+      description: document.getElementById('txn-desc').value,
+      disasterEventID: document.getElementById('txn-event').value || null,
+      entityName: document.getElementById('txn-entity').value.trim() || 'Unknown',
+      quantity:   parseInt(document.getElementById('txn-qty').value) || 1,
+      donorType:  document.getElementById('txn-donor-type').value,
+      donorId:    document.getElementById('txn-donor-id').value.trim() || null,
+      donorContact: document.getElementById('txn-donor-contact').value.trim() || null,
+    };
+    if (!body.transactionType || !Number.isFinite(body.amount) || body.amount <= 0) {
+      errEl.textContent = 'Type and a positive amount are required.';
+      errEl.classList.remove('hidden');
+      return;
+    }
+    const res = await API.post('/finance/transactions', body);
+    if (res.success) { Modal.close('modal-txn'); Toast.success('Transaction recorded.'); loadSummary(); loadTransactions(); }
+    else { errEl.textContent = res.message; errEl.classList.remove('hidden'); }
+  }
+
+  loadEvents();
+  loadSummary();
+  loadTransactions();
+</script>
+</body>
+</html>

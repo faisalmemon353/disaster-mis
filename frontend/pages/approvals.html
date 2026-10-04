@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>DISMIS — Approvals</title>
+  <link rel="stylesheet" href="../assets/css/style.css"/>
+</head>
+<body>
+<div class="app-shell">
+  <div id="sidebar-mount"></div>
+  <div class="main-area">
+    <div class="topbar">
+      <div><div class="topbar-title">APPROVAL WORKFLOW</div>
+      <div class="topbar-breadcrumb font-mono" style="font-size:10px;color:var(--text-muted)">// GLOBAL APPROVAL LOG</div></div>
+      <div class="topbar-status"><div class="status-dot"></div></div>
+    </div>
+    <div class="page-content">
+      <div class="page-header">
+        <div class="page-header-left"><div class="page-title">APPROVAL HISTORY</div><div class="page-sub">// GLOBAL PROJECT DECISIONS</div></div>
+        <button class="btn btn-ghost" onclick="loadHistory()">↻ REFRESH</button>
+      </div>
+
+      <!-- History -->
+      <div class="panel">
+        <div class="panel-header"><span class="panel-title">// Global Approval History</span></div>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead>
+              <tr><th>ID</th><th>Type</th><th>Details</th><th>Status</th><th>Requested By</th><th>Decision Time</th><th>Notes</th></tr>
+            </thead>
+            <tbody id="history-tbody">
+              <tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted);font-family:var(--font-mono);font-size:11px">LOADING...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/app.js"></script>
+<script>
+  if (!Auth.requireAuth()) throw new Error();
+  if (!Auth.hasRole(['Admin'])) {
+    Toast.error('Access denied.');
+    setTimeout(() => window.location.href = 'dashboard.html', 1200);
+  }
+  fetch('../components/sidebar.html').then(r=>r.text()).then(h=>{document.getElementById('sidebar-mount').innerHTML=h;Sidebar.init();});
+
+  async function loadHistory() {
+    const res = await API.get('/analytics/approvals/history');
+    if (!res || !res.success) return;
+    const statusMap = { Approved: 'available', Rejected: 'critical' };
+    Table.render('history-tbody', res.data || [], [
+      { key: 'RequestID', render: r => `<span class="font-mono" style="font-size:11px;color:var(--text-muted)">#${r.RequestID}</span>` },
+      { key: 'RequestType', render: r => `<span style="font-weight:bold">${r.RequestType}</span>` },
+      { key: 'Details', render: r => {
+          try {
+            const data = JSON.parse(r.OriginalNotes || '{}');
+            if (r.RequestType === 'Team Assignment') return `Report #${data.reportID || '?'} — ${data.teamType || 'N/A'} Team`;
+            return `Resource #${data.resourceID || '?'} (Qty: ${data.quantity || '?'})`;
+          } catch(e) { return '—'; }
+      }},
+      { key: 'Status', render: r => Format.badge(r.Status, statusMap[r.Status]||'pending') },
+      { key: 'RequestedByName', render: r => r.RequestedBy || '—' },
+      { key: 'ApprovedAt', render: r => r.ApprovedAt ? Format.datetime(r.ApprovedAt) : '—' },
+      { key: 'ApprovalNotes', render: r => `<span style="max-width:250px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-secondary)">${r.ApprovalNotes || '—'}</span>` },
+    ]);
+  }
+
+  loadHistory();
+</script>
+</body>
+</html>
